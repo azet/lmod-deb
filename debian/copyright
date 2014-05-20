@@ -10,6 +10,10 @@ Files: tools/base64.lua
 Copyright: 2006-2008 Alex Kloss
 License: LGPL-2
 
+Files: pkgs/term/*
+Copyright: 2009 Rob Hoelz <rob@hoelzro.net>
+License: MIT
+
 Files: debian/*
 Copyright: 2014 Aaron Zauner <azet@azet.org>
 License: MIT

@@ -2,7 +2,7 @@
 8b7f615c975fec3242825da4b1d682d1  usr/share/doc/lmod/README.old.gz
 01ccf348f19674d86f7fe002a55389a1  usr/share/doc/lmod/README_lua_modulefiles.txt
 5cda18891ec12dfb4b6d80b187b2aff1  usr/share/doc/lmod/changelog.Debian.gz
-64d0b211a465f01412c116c2dd26df2b  usr/share/doc/lmod/copyright
+5cbaa7f05ab1f5601763cdf653b093ce  usr/share/doc/lmod/copyright
 1a395a3bec3b89a336469265564dc00b  usr/share/lintian/overrides/lmod
 fc6008505e70a8837087bb0c84e88017  usr/share/lmod/5.5.1/init/bash
 b54e3db653532740aa96a43474f9bf4d  usr/share/lmod/5.5.1/init/csh
@@ -82,7 +82,7 @@ a6289fc4ecd03cf8197f3e20df9dc48c  usr/share/lmod/5.5.1/settarg/ModifyPath.lua
 c7a843b449d20e7c3408944c525631d4  usr/share/lmod/5.5.1/settarg/Output.lua
 778c3044c9e957c39356051659e20697  usr/share/lmod/5.5.1/settarg/ProcessModuleTable.lua
 3408f785380c0898b75d958cf93ab196  usr/share/lmod/5.5.1/settarg/STT.lua
-46266299ceaf5df04b233ae657a97eb6  usr/share/lmod/5.5.1/settarg/Version.lua
+a3a33008f6b22ee5c6482c1cd6148976  usr/share/lmod/5.5.1/settarg/Version.lua
 b0f29a14b0d96e523bb675fc88838c82  usr/share/lmod/5.5.1/settarg/getUname.lua
 cffa8d7dcad843a9b52ed1d879e2c3d3  usr/share/lmod/5.5.1/settarg/settarg_cmd
 4058a8d522f411853cf761748ef8db3e  usr/share/lmod/5.5.1/settarg/settarg_rc.lua
