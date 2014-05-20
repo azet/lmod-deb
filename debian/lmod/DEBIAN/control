@@ -3,7 +3,7 @@ Version: 5.5.1-1
 Architecture: amd64
 Maintainer: Aaron Zauner <azet@azet.org>
 Installed-Size: 826
-Depends: lua5.2, lua-filesystem, lua-posix
+Depends: lua5.2, lua-filesystem, lua-posix, lua-term
 Section: devel
 Priority: optional
 Homepage: https://www.tacc.utexas.edu/tacc-projects/lmod

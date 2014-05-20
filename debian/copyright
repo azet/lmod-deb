@@ -8,7 +8,7 @@ License: MIT
 
 Files: tools/base64.lua
 Copyright: 2006-2008 Alex Kloss
-License: LGPL2
+License: LGPL-2
 
 Files: debian/*
 Copyright: 2014 Aaron Zauner <azet@azet.org>
@@ -33,5 +33,5 @@ License: MIT
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
 
-License: LGPL-2.0
- [LICENSE TEXT]
+License: LGPL-2
+ `/usr/share/common-licenses/LGPL-2'
