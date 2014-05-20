@@ -10,6 +10,10 @@ Files: tools/base64.lua
 Copyright: 2006-2008 Alex Kloss
 License: LGPL-2
 
+Files: tools/json.lua
+Copyright: 2005-2009 Craig Mason-Jones
+License: MIT
+
 Files: pkgs/term/*
 Copyright: 2009 Rob Hoelz <rob@hoelzro.net>
 License: MIT
