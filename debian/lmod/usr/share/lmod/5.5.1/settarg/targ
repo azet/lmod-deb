@@ -1,5 +1,0 @@
-#!/bin/sh
-# -*- shell-script -*-
-# $Id$
-echo $TARG
-
