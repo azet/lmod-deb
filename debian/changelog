@@ -1,0 +1,5 @@
+lmod (5.5.1-1) unstable; urgency=medium
+
+  * Initial Lmod package 
+
+ -- Aaron Zauner <azet@azet.org>  Sun, 21 May 2014 00:05:23 -0600

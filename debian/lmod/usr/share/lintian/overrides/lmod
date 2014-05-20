@@ -1,0 +1,13 @@
+# these are optional language support files
+lmod: csh-considered-harmful usr/share/lmod/5.3.2/init/csh
+lmod: missing-dep-for-interpreter csh => tcsh | csh | c-shell (usr/share/lmod/5.3.2/init/csh)
+lmod: csh-considered-harmful usr/share/lmod/5.3.2/init/cshrc
+lmod: missing-dep-for-interpreter csh => tcsh | csh | c-shell (usr/share/lmod/5.3.2/init/cshrc)
+lmod: csh-considered-harmful usr/share/lmod/5.3.2/init/tcsh
+lmod: missing-dep-for-interpreter csh => tcsh | csh | c-shell (usr/share/lmod/5.3.2/init/tcsh)
+lmod: tclsh-script-but-no-tclsh-dep usr/share/lmod/5.3.2/libexec/ModulesVersion.tcl
+lmod: tclsh-script-but-no-tclsh-dep usr/share/lmod/5.3.2/libexec/tcl2lua.tcl
+lmod: executable-not-elf-or-script usr/share/lmod/5.3.2/init/perl
+# debhelper bug
+lmod: postinst-has-useless-call-to-ldconfig
+lmod: postrm-has-useless-call-to-ldconfig

@@ -1,0 +1,155 @@
+_module_avail() {
+	/usr/lmod/lmod/libexec/lmod bash -t avail  2>&1 > /dev/null | sed ' /:$/d; s#/*$##g;'
+}
+
+_module_spider() {
+	/usr/lmod/lmod/libexec/lmod bash -t spider  2>&1 > /dev/null
+}
+
+_module_loaded_modules() {
+	/usr/lmod/lmod/libexec/lmod bash -t list  2>&1 > /dev/null | sed ' /^ *$/d; /:$/d; s#/*$##g;'
+}
+
+_module_loaded_modules_negated() {
+	/usr/lmod/lmod/libexec/lmod bash -t list  2>&1 > /dev/null | sed ' /^ *$/d; /:$/d; s#/*$##g; s|^|-|g;'
+}
+
+_module_not_yet_loaded() {
+	comm -23  <(_module_avail|sort)  <(_module_loaded_modules|sort)
+}
+
+_module_long_arg_list() {
+	local cur="$1" i
+
+	if [[ ${COMP_WORDS[COMP_CWORD-2]} == sw* ]]; then
+		COMPREPLY=( $(compgen -W "$(_module_not_yet_loaded)" -- "$cur") )
+		return
+	fi
+	for ((i = COMP_CWORD - 1; i > 0; i--)); do
+	  case ${COMP_WORDS[$i]} in
+	    add|load)
+		COMPREPLY=( $(compgen -W "$(_module_not_yet_loaded)" -- "$cur") )
+		break;;
+	    rm|remove|unload|switch|swap)
+		COMPREPLY=( $(compgen -W "$(_module_loaded_modules)" -- "$cur") )
+		break;;
+	  esac
+	done
+}
+
+_module() {
+	local cur="$2" prev="$3" cmds opts
+
+	COMPREPLY=()
+
+	cmds="add avail delete help keyword list load purge rm restore save show spider swap \
+	      unload unuse update use whatis"
+
+	opts="-d -D -h -q -t -v -w --expert --help  --quiet --terse --version --default --width -r --regexp --mt"
+
+	case "$prev" in
+	add|load|try-load)
+                        COMPREPLY=( $(compgen -W "$(_module_not_yet_loaded)" -- "$cur") );;
+        spider)         COMPREPLY=( $(compgen -W "$(_module_spider)" -- "$cur") );;
+	rm|remove|unload|switch|swap)
+			COMPREPLY=( $(      compgen -W "$(_module_loaded_modules)" -- "$cur") );;
+	unuse)		COMPREPLY=( $(IFS=: compgen -W "${MODULEPATH}" -- "$cur") );;
+	use|*-a*)	;;			# let readline handle the completion
+	help|show|whatis)
+			COMPREPLY=( $(compgen -W "$(_module_avail)" -- "$cur") );;
+	*) if test $COMP_CWORD -gt 2
+	   then
+		_module_long_arg_list "$cur"
+	   else
+		case "$cur" in
+		# The mappings below are optional abbreviations for convenience
+		ls)	COMPREPLY="list";;	# map ls -> list
+		sw*)	COMPREPLY="swap";;
+
+		-*)	COMPREPLY=( $(compgen -W "$opts" -- "$cur") );;
+		*)	COMPREPLY=( $(compgen -W "$cmds" -- "$cur") );;
+		esac
+	   fi;;
+	esac
+}
+complete  -F _module module
+
+_ml() {
+  local cur="$2" prev="$3" cmds opts found
+  #echo cur=%$cur% prev=%$prev% >> $HOME/t/ml.log
+
+  COMPREPLY=()
+
+  cmds="add avail delete help keyword list load purge rm restore save sl show spider swap unload \
+        unuse update use whatis"
+
+  opts="-d -D -h -q -t -v -w --expert --help  --quiet --terse --version --default --Verbose --width -r --regexp --mt"
+
+  #echo 2  >> $HOME/t/ml.log
+
+
+  case "$prev" in
+    spider)         COMPREPLY=( $(compgen -W "$(_module_spider)" -- "$cur") );;
+    rm|remove|unload|swap)
+                    COMPREPLY=( $(compgen -W "$(_module_loaded_modules)" -- "$cur") );;
+    unuse)	    COMPREPLY=( $(IFS=: compgen -W "${MODULEPATH}" -- "$cur") );;
+    use|*-a*)	;;			# let readline handle the completion
+    help|show|whatis)
+                    COMPREPLY=( $(compgen -W "$(_module_avail)" -- "$cur") );;
+
+    *)
+       case "$cur" in
+         -*)
+            #echo a >> $HOME/t/ml.log
+            if [ $COMP_CWORD -eq 1 ]; then
+              COMPREPLY=( $(compgen -W "$opts $(_module_loaded_modules_negated)" -- "$cur") )
+            else
+              COMPREPLY=( $(compgen -W "      $(_module_loaded_modules_negated)" -- "$cur") )
+            fi;;
+         *)
+            #echo 3 >> $HOME/t/ml.log
+            if [ $COMP_CWORD -eq 1 ]; then
+              case "$cur" in
+                ls)  COMPREPLY="list";;      # map ls -> list
+                sw*) COMPREPLY="swap";;
+                *)
+                  #echo 4 >> $HOME/t/ml.log
+                  COMPREPLY=( $(compgen -W "$cmds $(_module_avail)" -- "$cur") );;
+              esac
+            else
+	      if [[ ${COMP_WORDS[COMP_CWORD-2]} == sw* ]]; then
+	        COMPREPLY=( $(compgen -W "$(_module_not_yet_loaded)" -- "$cur") )
+              else
+	        for ((i = COMP_CWORD - 1; i > 0; i--)); do
+	          case ${COMP_WORDS[$i]} in
+	            show|whatis)
+	    	  COMPREPLY=( $(compgen -W "$(_module_avail)" -- "$cur") )
+                      found=1
+	    	  break;;
+	            rm|remove|unload)
+	    	  COMPREPLY=( $(compgen -W "$(_module_loaded_modules)" -- "$cur") )
+                      found=1
+	    	  break;;
+                    spider)
+                      COMPREPLY=( $(compgen -W "$(_module_spider)" -- "$cur") )
+                      found=1
+	    	  break;;
+	          esac
+	        done
+                if [ -z "$found" ]; then
+                  COMPREPLY=( $(compgen -W "$(_module_avail)" -- "$cur") )
+                fi
+              fi
+            fi;;
+       esac
+  esac
+
+  #echo 5 >> $HOME/t/ml.log
+}
+
+complete  -F _ml ml
+
+
+# Local Variables:
+# mode: shell-script
+# End:
