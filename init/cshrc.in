@@ -1,0 +1,39 @@
+#!/bin/csh
+# -*- shell-script -*-
+########################################################################
+#  This is the system wide source file for setting up
+#  modules:
+#
+########################################################################
+
+set MY_NAME="@PKG@/init/cshrc"
+
+
+
+if ( ! $?MODULEPATH_ROOT ) then
+    if ( $?USER) then
+        setenv USER $LOGNAME
+    endif
+
+    set UNAME = `uname`
+    setenv LMOD_sys    $UNAME
+
+    setenv LMOD_arch   `uname -m`
+    if ( "x$UNAME" == xAIX ) then
+        setenv LMOD_arch   rs6k
+    endif
+
+    setenv TARG_TITLE_BAR_PAREN " "
+    setenv LMOD_FULL_SETTARG_SUPPORT @lmod_full_settarg_support@
+    setenv LMOD_SETTARG_CMD     :
+    setenv LMOD_COLORIZE        @colorize@
+    setenv LMOD_PREPEND_BLOCK   @prepend_block@
+    setenv MODULEPATH_ROOT      "@modulepath_root@"
+    setenv MODULEPATH           `@PKG@/libexec/addto --append MODULEPATH $MODULEPATH_ROOT/$LMOD_sys $MODULEPATH_ROOT/Core`
+    setenv MODULEPATH           `@PKG@/libexec/addto --append MODULEPATH @PKG@/modulefiles/Core`
+    setenv BASH_ENV @PKG@/init/bash
+endif
+
+if ( -f  @PKG@/init/csh  ) then
+  source @PKG@/init/csh
+endif

@@ -1,0 +1,34 @@
+#!/bin/sh
+# -*- shell-script -*-
+########################################################################
+#  This is the system wide source file for setting up
+#  modules:
+#
+########################################################################
+
+if [ -z "$USER_IS_ROOT" ]; then
+
+  if [ -z "$MODULEPATH_ROOT" ]; then
+    export USER=${USER-${LOGNAME}}  # make sure $USER is set
+    export LMOD_sys=`uname`
+
+    LMOD_arch=`uname -m`
+    if [ "x$LMOD_sys" = xAIX ]; then
+      LMOD_arch=rs6k
+    fi
+    export LMOD_arch
+
+    export MODULEPATH_ROOT="@modulepath_root@"
+    export LMOD_SETTARG_CMD=":"
+    export LMOD_FULL_SETTARG_SUPPORT=@lmod_full_settarg_support@
+    export LMOD_COLORIZE=@colorize@
+    export LMOD_PREPEND_BLOCK=@prepend_block@
+    export MODULEPATH=$(@PKG@/libexec/addto --append MODULEPATH $MODULEPATH_ROOT/$LMOD_sys $MODULEPATH_ROOT/Core)
+    export MODULEPATH=$(@PKG@/libexec/addto --append MODULEPATH @PKG@/modulefiles/Core)
+
+    export BASH_ENV=@PKG@/init/bash
+  fi
+
+  . @PKG@/init/bash >/dev/null # Module Support
+
+fi
