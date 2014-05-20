@@ -2,7 +2,7 @@ Source: lmod
 Section: devel
 Priority: optional
 Maintainer: Aaron Zauner <azet@azet.org>
-Build-Depends: debhelper (>= 8.0.0), autotools-dev, lua-filesystem, lua-posix, lua-term
+Build-Depends: debhelper (>= 8.0.0), autotools-dev, lua-filesystem, lua-posix, lua-term, lua-json
 Standards-Version: 3.9.5
 Homepage: https://www.tacc.utexas.edu/tacc-projects/lmod
 #Vcs-Git: git://git.debian.org/collab-maint/lmod.git
@@ -10,7 +10,7 @@ Homepage: https://www.tacc.utexas.edu/tacc-projects/lmod
 
 Package: lmod
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, lua5.2, lua-filesystem, lua-posix, lua-term
+Depends: ${shlibs:Depends}, ${misc:Depends}, lua5.2, lua-filesystem, lua-posix, lua-term, lua-json
 Description: Lua based environment modules
  Lmod is a Lua based module system that easily handles the MODULEPATH
  Hierarchical problem. Environment Modules provide a convenient way to
