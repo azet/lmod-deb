@@ -61,6 +61,57 @@ local T0        = os.time()
 local load      = (_VERSION == "Lua 5.1") and loadstring or load
 
 --------------------------------------------------------------------------
+-- abspath(): find true path through symlinks.
+
+function abspath_localdir (path)
+   if (path == nil) then return nil end
+   local cwd = lfs.currentdir()
+   path = path:trim()
+
+   if (path:sub(1,1) ~= '/') then
+      path = pathJoin(cwd,path)
+   end
+
+   local dir    = dirname(path)
+   local ival   = lfs.chdir(dir)
+
+   local cdir   = lfs.currentdir()
+   if (cdir == nil) then
+      dbg.print{"lfs.currentdir(): is nil"}
+   end
+
+   dir          = cdir or dir
+
+
+   path = pathJoin(dir, barefilename(path))
+   local result = path
+
+   local attr = lfs.symlinkattributes(path)
+   if (attr == nil) then
+      lfs.chdir(cwd)
+      return nil
+   elseif (attr.mode == "link") then
+      local rl = posix.readlink(path)
+      dbg.print{"path: ",path,", rl: ",rl,"\n"}
+      if (not rl) then
+         lfs.chdir(cwd)
+         return nil
+      end
+      if (rl:sub(1,1) == "/" or rl:sub(1,3) == "../") then
+         lfs.chdir(cwd)
+         return result
+      end
+      if (rl:sub(1,1) == ".") then
+         lfs.chdir(cwd)
+         return result
+      end
+      result = abspath_localdir(rl)
+   end
+   lfs.chdir(cwd)
+   return result
+end
+
+--------------------------------------------------------------------------
 -- argsPack():  This is 5.1 Lua function to cover the table.pack function
 --              that is in Lua 5.2 and later.
 
@@ -141,6 +192,7 @@ function case_independent_cmp(a,b)
    end
 end
 
+
 --------------------------------------------------------------------------
 -- expert(): Are we in expert mode?
 local __expert = false
@@ -149,6 +201,16 @@ function expert()
       __expert = getenv("LMOD_EXPERT")
    end
    return __expert
+end
+
+--------------------------------------------------------------------------
+-- quiet(): Are we in quiet mode?
+local __quiet = false
+function quiet()
+   if (__quiet == false) then
+      __quiet = getenv("LMOD_QUIET") or getenv("LMOD_EXPERT")
+   end
+   return __quiet
 end
 
 --------------------------------------------------------------------------
@@ -252,6 +314,62 @@ function allVersions(pathA, n)
       end
    end
    return a
+end
+
+function indexPath(old, oldA, new, newA)
+   dbg.start{"indexPath(",old, ", ", new,")"}
+   local oldN = #oldA
+   local newN = #newA
+   local idxM = newN - oldN + 1
+
+   dbg.print{"oldN: ",oldN,", newN: ",newN,"\n"}
+
+   if (oldN >= newN or newN == 1) then
+      if (old == new) then
+         dbg.fini("(1) indexPath")
+         return 1
+      end
+      dbg.fini("(2) indexPath")
+      return -1
+   end
+
+   local icnt = 1
+
+   local idxO = 1
+   local idxN = 1
+
+   while (true) do
+      local oldEntry = oldA[idxO]
+      local newEntry = newA[idxN]
+
+      icnt = icnt + 1
+      if (icnt > 5) then
+         break
+      end
+
+
+      if (oldEntry == newEntry) then
+         idxO = idxO + 1
+         idxN = idxN + 1
+
+         if (idxO > oldN) then break end
+      else
+         idxN = idxN + 2 - idxO
+         idxO = 1
+         if (idxN > idxM) then
+            dbg.fini("indexPath")
+            return -1
+         end
+      end
+   end
+
+   idxN = idxN - idxO + 1
+
+   dbg.print{"idxN: ", idxN, "\n"}
+
+   dbg.fini("indexPath")
+   return idxN
+
 end
 
 ---------------------------------------------------------------------------
@@ -589,16 +707,53 @@ function UUIDString(epoch)
 
    return uuid
 end
+modV = false
 
+function moduleRCFile(current, path)
+   dbg.start{"moduleRCFile(",path,")"}
+   local f       = io.open(path,"r")
+   if (not f)                        then
+      dbg.print{"could not find: ",path,"\n"}
+      dbg.fini("moduleRCFile")
+      return nil
+   end
+   local s       = f:read("*line")
+   f:close()
+   if (not s:find("^#%%Module"))      then
+      dbg.print{"could not find: #%Module\n"}
+      dbg.fini("moduleRCFile")
+      return nil
+   end
+   local cmd = pathJoin(cmdDir(),"RC2lua.tcl") .. " " .. path
+   local s = capture(cmd):trim()
+   assert(load(s))()
+   local version = false
+   for i = 1,#modV do
+      local entry = modV[i]
+      if (entry.module_version == "default") then
+         local name = entry.module_name
+         local i, j = name:find(current)
+         local nLen = name:len()
+         if (j+1 < nLen and name:sub(j+1,j+1) == '/') then
+            version = name:sub(j+2)
+            break
+         end
+      end
+   end
+
+   dbg.print{"version: ",version,"\n"}
+   dbg.fini("moduleRCFile")
+   return version
+   
+end
 --------------------------------------------------------------------------
 -- versionFile(): This routine is given the absolute path to a .version 
 --                file.  It checks to make sure that it is a valid TCL
 --                file.  It then uses the ModulesVersion.tcl script to 
 --                return what the value of "ModulesVersion" is.
 
-modV = false
-function versionFile(path)
-   dbg.start{"versionFile(",path,")"}
+function versionFile(v, sn, path)
+   dbg.start{"versionFile(v: ",v,", sn: ",sn,", path: ",path,")"}
    local f       = io.open(path,"r")
    if (not f)                        then
       dbg.print{"could not find: ",path,"\n"}
@@ -612,31 +767,52 @@ function versionFile(path)
       dbg.fini("versionFile")
       return nil
    end
-   local cmd = pathJoin(cmdDir(),"ModulesVersion.tcl") .. " " .. path
-   local s = capture(cmd):trim()
-   assert(load(s))()
-   local version = modV.version
-   if (modV.date ~= "***") then
-     local a = {}
-     for s in modV.date:split("/") do
-        a[#a + 1] = tonumber(s) or 0
-     end
+   local version = false
 
-     if (a[1] < 2000 or a[2] > 12) then
-        LmodMessage("The date is written in the wrong format: \"",modV.date,
-                    "\".  Please use YYYY/MM/DD.")
-     end
-
-     local epoch   = os.time{year = a[1], month = a[2], day = a[3]} or 0
-     local current = os.time() 
-     if (current < epoch) then
-        LmodMessage("The default version for module \"",myModuleName(),
-                    "\" is changing on ", modV.date, " from ",modV.version,
-                    " to ", modV.newVersion,"\n")
-        version = modV.version
-     else
-        version = modV.newVersion
-     end
+   if (v == "/.modulerc") then
+      local cmd = pathJoin(cmdDir(),"RC2lua.tcl") .. " " .. path
+      local s = capture(cmd):trim()
+      assert(load(s))()
+      for i = 1,#modV do
+         local entry = modV[i]
+         if (entry.module_version == "default") then
+            local name = entry.module_name
+            local i, j = name:find(sn)
+            local nLen = name:len()
+            if (j+1 < nLen and name:sub(j+1,j+1) == '/') then
+               version = name:sub(j+2)
+               break
+            end
+         end
+      end
+   elseif (v == "/.version") then
+      local cmd = pathJoin(cmdDir(),"ModulesVersion.tcl") .. " " .. path
+      local s = capture(cmd):trim()
+      assert(load(s))()
+      version = modV.version
+      if (modV.date ~= "***") then
+         local a = {}
+         for s in modV.date:split("/") do
+            a[#a + 1] = tonumber(s) or 0
+         end
+         
+         if (a[1] < 2000 or a[2] > 12) then
+            LmodMessage("The .version file for \"",sn,
+                        "\" has the date is written in the wrong format: \"",
+                        modV.date,"\".  Please use YYYY/MM/DD.")
+         end
+         
+         local epoch   = os.time{year = a[1], month = a[2], day = a[3]} or 0
+         local current = os.time() 
+         if (current < epoch) then
+            LmodMessage("The default version for module \"",myModuleName(),
+                        "\" is changing on ", modV.date, " from ",modV.version,
+                        " to ", modV.newVersion,"\n")
+            version = modV.version
+         else
+            version = modV.newVersion
+         end
+      end
    end
    dbg.print{"version: ",version,"\n"}
    dbg.fini("versionFile")
@@ -681,9 +857,14 @@ function haveWarnings()
    return s_haveWarnings
 end
 
+function clearWarningFlag()
+   s_warning = false
+end
+
 function setWarningFlag()
    s_warning = true
 end
+
 function getWarningFlag()
    return s_warning
 end

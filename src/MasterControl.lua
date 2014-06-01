@@ -73,6 +73,7 @@ local max          = math.max
 local dbg          = require("Dbg"):dbg()
 local Exec         = require("Exec")
 local MName        = require("MName")
+local ModulePath   = ModulePath
 local ModuleStack  = require("ModuleStack")
 local Var          = require("Var")
 local base64       = require("base64")
@@ -167,6 +168,10 @@ function M.name(self)
    return self.my_name
 end
 
+function M.tcl_mode(self)
+   return self.my_tcl_mode
+end
+
 
 local function valid_name(nameTbl, name)
    if (not nameTbl[name]) then
@@ -207,6 +212,8 @@ end
 -- Load / Unload functions
 -------------------------------------------------------------------
 function M.load_usr(self, mA)
+   
+
    local a = self:load(mA)
    if (haveWarnings()) then
       mustLoad(mA)
@@ -223,7 +230,7 @@ function M.load(self, mA)
    end
 
    local a = master.load(mA)
-   if (not expert()) then
+   if (not quiet()) then
 
       local mt      = MT:mt()
       local t       = {}
@@ -388,7 +395,7 @@ function M.remove_path(self, t)
    dbg.start{"MasterControl:remove_path{\"",name,"\", \"",value,
              "\", delim=\"",sep,"\", nodups=\"",nodups,
              "\", priority=",priority,
-             "\", where=",where,
+             ", where=",where,
              "}"}
 
    if (varTbl[name] == nil) then
@@ -666,7 +673,7 @@ function M.error(self, ...)
 end
 
 function M.warning(self, ...)
-   if (not expert() and  haveWarnings()) then
+   if (not quiet() and  haveWarnings()) then
       io.stderr:write("\n",colorize("red", "Lmod Warning: "))
       local arg = pack(...)
       for i = 1, arg.n do
@@ -680,6 +687,9 @@ end
 
 
 function M.message(self, ...)
+   if (quiet()) then
+      return
+   end
    local arg = pack(...)
    for i = 1, arg.n do
       io.stderr:write(tostring(arg[i]))

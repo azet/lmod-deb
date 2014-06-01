@@ -34,7 +34,7 @@
 #
 #------------------------------------------------------------------------
 
-global g_loadT g_varsT g_fullName g_usrName g_shellName
+global g_loadT g_varsT g_fullName g_usrName g_shellName g_mode
 namespace eval ::cmdline {
     namespace export getArgv0 getopt getKnownOpt getfiles getoptions \
 	    getKnownOptions usage
@@ -168,6 +168,8 @@ proc ::cmdline::getKnownOptions {arglistVar optlist {usage options:}} {
     }
     return [array get result]
 }
+
+
 
 # ::cmdline::GetOptionDefaults --
 #
@@ -319,15 +321,44 @@ proc ::cmdline::getArgv0 {} {
     return [file rootname $name]
 }
 
+set g_modeStack {}
+
+proc currentMode {} {
+    global g_modeStack
+
+    set mode [lindex $g_modeStack end]
+    return $mode
+}
+
+proc pushMode {mode} {
+    global g_modeStack
+
+    lappend g_modeStack $mode
+}
+
+proc popMode {} {
+    global g_modeStack
+
+    set len [llength $g_modeStack]
+    set len [expr {$len - 2}]
+    set g_modeStack [lrange $g_modeStack 0 $len]
+}
+
+
 proc module-info {what {more {}}} {
     global g_fullName g_usrName g_shellName
+    set mode [currentMode]
     switch -- $what {
     "mode" {
-        if {$more == "load" } {
-            return 1
-        } else {
-            return 0
-        }
+	if {$more != ""} {
+	    if {$mode == $more} {
+		return 1
+	    } else {
+		return 0
+	    }
+	} else {
+	    return $mode
+	}
     }
     "shell" {
         return $g_shellName
@@ -358,6 +389,8 @@ proc module-whatis { msg } {
 }
 
 proc setenv { var val } {
+    global env
+    set env($var) $val
     if {[string match $var "-respect"] || [string match $var "-r"] || [string match $var "--respect"]} {
         set respect "true"
         set var [lindex $args 0]
@@ -371,7 +404,8 @@ proc setenv { var val } {
 }
 
 proc pushenv { var val } {
-    global g_varsT
+    global env  g_varsT
+    set env($var) $val
     set g_varsT($var) $val
     cmdargs "pushenv" $var $val
 }
@@ -478,7 +512,12 @@ proc tryloadcmd { args } {
     eval cmdargs "try_load" $args
 }
 proc unload { args } {
-    eval cmdargs "unload" $args
+    set mode [currentMode]
+    set cmdName "unload"
+    if {$mode == "remove"} {
+        set cmdName "load"
+    }
+    eval cmdargs $cmdName $args
 }
 proc prereq { args } {
     eval cmdargs "prereq" $args
@@ -510,7 +549,6 @@ proc unuse { args } {
     foreach path $args {
 	eval cmdargs "remove_path" MODULEPATH $path
     }
-
 }
 
 proc setPutMode { value } {
@@ -672,7 +710,10 @@ proc execute-modulefile {modfile } {
 }
 
 proc main { modfile } {
+    global g_mode
+    pushMode $g_mode
     execute-modulefile $modfile
+    popMode
 }
 
 global g_loadT g_help
@@ -681,6 +722,7 @@ set options {
             {l.arg   ""     "loaded list"}
             {h              "print ModulesHelp command"}
             {f.arg   "???"  "module full name"}
+            {m.arg   "load" "mode: load remove display"}
             {s.arg   "bash" "shell name"}
             {u.arg   "???"  "module specified name"}
 }
@@ -696,4 +738,5 @@ foreach m [split $params(l) ":"] {
 set g_fullName  $params(f)
 set g_usrName   $params(u)
 set g_shellName $params(s)
+set g_mode      $params(m)
 eval main $argv

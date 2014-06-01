@@ -467,13 +467,6 @@ function main()
 
    localvar(masterTbl.localvarA)
 
-   if (masterTbl.debug > 0 or masterTbl.dbglvl) then
-      local dbgLevel = max(masterTbl.debug, masterTbl.dbglvl or 1)
-      dbg:activateDebug(dbgLevel)
-   end
-   dbg.start{"lmod(", arg_str,")"}
-   dbg.print{"Lmod Version: ",Version.name(),"\n"}
-   dbg.print{"package.path: ",package.path,"\n"}
    set_duplication()         -- Chose how to handle duplicate entries in a path.
    build_accept_functions()  -- build the accept functions to allow or ignore TCL mfiles
    readRC()
@@ -507,6 +500,16 @@ function main()
    banner        = Banner:banner()
    local cmdName = masterTbl.pargs[1]
    table.remove(masterTbl.pargs,1)
+
+   if (masterTbl.debug > 0 or masterTbl.dbglvl) then
+      local configuration = require("Configuration"):configuration()
+      io.stderr:write(configuration:report())
+      local dbgLevel = max(masterTbl.debug, masterTbl.dbglvl or 1)
+      dbg:activateDebug(dbgLevel)
+   end
+   dbg.start{"lmod(", arg_str,")"}
+   dbg.print{"Lmod Version: ",Version.name(),"\n"}
+   dbg.print{"package.path: ",package.path,"\n"}
 
    ------------------------------------------------------------
    -- Must output local variables even when there is the command
@@ -594,11 +597,10 @@ function main()
    mt = MT:mt()
 
    -- Report any changes (worth reporting from original MT)
-   if (not expert()) then
+   if (not quiet()) then
       mt:reportChanges()
    end
 
-   dbg.print{"mt: ",tostring(mt),"\n"}
    -- Store the Module table in "_ModuleTable_" env. var.
    local n        = mt:name()
    local oldValue = getMT() or ""
@@ -620,8 +622,7 @@ function main()
       io.stderr:write(timer:report(),"\n")
    end
 
-
-   if (getWarningFlag() and not expert() ) then
+   if (getWarningFlag() and not quiet() ) then
       LmodErrorExit()
    end
 end

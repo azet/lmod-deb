@@ -47,6 +47,7 @@ local BeautifulTbl = require('BeautifulTbl')
 local ColumnTable  = require('ColumnTable')
 local MName        = require("MName")
 local Spider       = require("Spider")
+local Version      = require("Version")
 local concatTbl    = table.concat
 local dbg          = require("Dbg"):dbg()
 local getenv       = os.getenv
@@ -192,7 +193,7 @@ function List(...)
    local mt = MT:mt()
    local totalA = mt:list("userName","any")
    if (#totalA < 1) then
-      LmodWarning("No modules installed\n")
+      LmodMessage("No modules loaded\n")
       dbg.fini("List")
       return
    end
@@ -352,11 +353,18 @@ function Load_Usr(...)
       MCP:unload_usr(uA)
    end
 
-   local mcp_old = mcp
-   mcp           = MCP
-   dbg.print{"Setting mcp to ", mcp:name(),"\n"}
-   local b       = mcp:load_usr(lA)
-   mcp           = mcp_old
+   local b
+   if (#lA > 0) then
+      if (varTbl[ModulePath] == nil or varTbl[ModulePath]:expand() == "") then
+         LmodWarning("MODULEPATH is undefined\n")
+      end
+
+      local mcp_old = mcp
+      mcp           = MCP
+      dbg.print{"Setting mcp to ", mcp:name(),"\n"}
+      b             = mcp:load_usr(lA)
+      mcp           = mcp_old
+   end
 
    dbg.fini("Load_Usr")
    return b
@@ -371,6 +379,7 @@ function Purge(force)
    local totalA  = mt:list("short","any")
 
    if (#totalA < 1) then
+      clearWarningFlag()
       return
    end
 
@@ -383,8 +392,11 @@ function Purge(force)
    MCP:unload_usr(mA,force)
 
    -- Make Default Path be the new MODULEPATH
-   mt:buildMpathA(mt:getBaseMPATH())
+   -- mt:buildMpathA(mt:getBaseMPATH())
 
+   -- A purge should not set the warning flag.
+   clearWarningFlag()
+   dbg.print{"warningFlag: ", getWarningFlag(),"\n"}
    dbg.fini("Purge")
 end
 
@@ -566,17 +578,6 @@ function Save(...)
       return
    end
 
-   --local aa = mt:safeToSave()
-   --
-   --if (#aa > 0) then
-   --   LmodWarning("Unable to save module state as a \"default\"\n",
-   --               "The following module(s):\n",
-   --               "  ",concatTbl(aa,", "),"\n",
-   --               "mix load statements with setting of environment variables.\n")
-   --   dbg.fini("Save")
-   --   return
-   --end
-
    local attr = lfs.attributes(path)
    if (not attr) then
       mkdir_recursive(path)
@@ -586,9 +587,18 @@ function Save(...)
       os.rename(path, path .. "~")
    end
    mt:setHashSum()
-   serializeTbl{name=mt:name(), value=mt, fn = path, indent = true}
+
+   local f  = io.open(path,"w")
+   if (f) then
+      f:write("-- -*- lua -*-\n")
+      f:write("-- created: ",os.date()," --\n")
+      local s0 = "-- Lmod ".. Version.name() .. "\n"
+      local s1 = serializeTbl{name=mt:name(), value=mt, indent = true}
+      f:write(s0,s1)
+      f:close()
+   end
    mt:hideHash()
-   if (not expert()) then
+   if (not quiet()) then
       io.stderr:write("Saved current collection of modules to: ",a,
                       msgTail, "\n")
    end

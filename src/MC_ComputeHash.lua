@@ -52,12 +52,13 @@
 require("strict")
 require("utils")
 
-MC_ComputeHash         = inheritsFrom(MasterControl)
-MC_ComputeHash.my_name = "MC_ComputeHash"
-local M                = MC_ComputeHash
-local dbg              = require("Dbg"):dbg()
-local concatTbl        = table.concat
-local A                = ComputeModuleResultsA
+MC_ComputeHash             = inheritsFrom(MasterControl)
+MC_ComputeHash.my_name     = "MC_ComputeHash"
+MC_ComputeHash.my_tcl_mode = "load"
+local M                    = MC_ComputeHash
+local dbg                  = require("Dbg"):dbg()
+local concatTbl            = table.concat
+local A                    = ComputeModuleResultsA
 
 function ShowCmd(name, ...)
    A[#A+1] = ShowCmdStr(name, ...)
@@ -83,6 +84,12 @@ M.unset_alias          = MasterControl.quiet
 M.unset_shell_function = MasterControl.quiet
 M.unsetenv             = MasterControl.quiet
 M.whatis               = MasterControl.quiet
+M.family               = MasterControl.quiet
+M.prereq               = MasterControl.quiet
+M.prereq_any           = MasterControl.quiet
+M.conflict             = MasterControl.quiet
+M.error                = MasterControl.quiet
+M.message              = MasterControl.quiet
 
 
 function M.always_load(self, mA)
@@ -90,22 +97,25 @@ function M.always_load(self, mA)
 end
 
 function M.always_unload(self, mA)
-   A[#A+1] = ShowCmdA("always_load", mA)
+   A[#A+1] = ShowCmdA("always_unload", mA)
 end
 
 function M.prepend_path(self, t)
+   local name = t[1]
    if (name ~= "MODULEPATH") then return end
-   ShowCmd("prepend_path", t[1], t[2], t.sep)
+   ShowCmd("prepend_path", name, t[2], t.sep)
 end
 
 function M.append_path(self, t)
+   local name = t[1]
    if (name ~= "MODULEPATH") then return end
-   ShowCmd("append_path", t[1], t[2], t.sep)
+   ShowCmd("append_path", name, t[2], t.sep)
 end
 
 function M.remove_path(self, t)
+   local name = t[1]
    if (name ~= "MODULEPATH") then return end
-   ShowCmd("remove_path", t[1], t[2], t.sep)
+   ShowCmd("remove_path", name, t[2], t.sep)
 end
 
 function M.load(self, mA)
@@ -126,32 +136,9 @@ function M.inherit(self, ...)
    ShowCmd("inherit",...)
 end
 
-function M.family(self, ...)
-   ShowCmd("family",...)
-end
-
 function M.unload(self, mA)
    A[#A+1] = ShowCmdA("unload", mA)
 end
 
-function M.prereq(self, ...)
-   ShowCmd("prereq",...)
-end
-
-function M.conflict(self, ...)
-   ShowCmd("conflict",...)
-end
-
-function M.prereq_any(self, ...)
-   ShowCmd("prereq_any",...)
-end
-
-function M.error(self, ...)
-   ShowCmd("LmodError", ...)
-end
-
-function M.message(self, ...)
-   ShowCmd("LmodMessage", ...)
-end
 
 return M

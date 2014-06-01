@@ -185,7 +185,7 @@ function M.cache(self, t)
       if (attr.mode == "directory") then
          mDT[path]        = mDT[path]        or -1
          moduleDirT[path] = moduleDirT[path] or false
-         dbg.print{"moduleDirT[",path,"]: ",moduleDirT[path], "\n"}
+         dbg.print{"moduleDirT[",path,"]: ",moduleDirT[path], "\n",level=2}
       end
    end
 
@@ -307,9 +307,9 @@ end
 
 
 function M.build(self, fast)
-   local mt = MT:mt()
-
    dbg.start{"Cache:build(fast=", fast,")"}
+   local Pairs = dbg.active() and pairsByKeys or pairs
+   local mt = MT:mt()
    local masterTbl = masterTbl()
 
 
@@ -327,7 +327,7 @@ function M.build(self, fast)
 
    local dirA   = {}
    local numMDT = 0
-   for k, v in pairs(moduleDirT) do
+   for k, v in Pairs(moduleDirT) do
       numMDT = numMDT + 1
       if (not v) then
          dbg.print{"rebuilding cache for directory: ",k,"\n"}
@@ -348,20 +348,20 @@ function M.build(self, fast)
    local moduleT       = self.moduleT
    dbg.print{"buildModuleT: ",buildModuleT,"\n"}
 
-   dbg.print{"mt: ", tostring(mt), "\n"}
+   dbg.print{"mt: ", tostring(mt), "\n",level=2}
 
    local short    = mt:getShortTime()
    if (not buildModuleT) then
       ancient = _G.ancient or ancient
       mt:setRebuildTime(ancient, short)
    else
-      local prtRbMsg = ((not masterTbl.expert)               and
+      local prtRbMsg = ((not quiet())                        and
                         (not masterTbl.initial)              and
                         ((not short) or (short > shortTime)) and
                         (not self.quiet)
                        )
-      dbg.print{"short: ", short, " shortTime: ", shortTime,"\n"}
-      dbg.print{"expert: ",masterTbl.expert,", initial: ", masterTbl.initial,"\n"}
+      dbg.print{"short: ", short, " shortTime: ", shortTime,"\n", level=2}
+      dbg.print{"quiet: ",quiet(),", initial: ", masterTbl.initial,"\n"}
       dbg.print{"prtRbMsg: ",prtRbMsg,", quiet: ",self.quiet,"\n"}
 
       local cTimer = CTimer:cTimer("Rebuilding cache, please wait ...",
@@ -378,7 +378,7 @@ function M.build(self, fast)
       mcp           = mcp_old
       dbg.print{"Setting mpc to ", mcp:name(),"\n"}
 
-      dbg.print{"t2-t1: ",t2-t1, " shortTime: ", shortTime, "\n"}
+      dbg.print{"t2-t1: ",t2-t1, " shortTime: ", shortTime, "\n", level=2}
 
       local r = {}
       hook.apply("writeCache",r)
@@ -408,7 +408,7 @@ function M.build(self, fast)
             newShortTime = short
          end
          mt:setRebuildTime(ancient, newShortTime)
-         dbg.print{"mt: ", tostring(mt), "\n"}
+         dbg.print{"mt: ", tostring(mt), "\n", level=2}
          doneMsg = " (not written to file) done"
       else
          mkdir_recursive(self.usrCacheDir)
@@ -416,11 +416,13 @@ function M.build(self, fast)
          local s1 = "ancient = " .. tostring(math.floor(ancient)) .."\n"
          local s2 = serializeTbl{name="moduleT",      value=userModuleT,
                                  indent=true}
+         os.rename(userModuleTFN, userModuleTFN .. "~")
          local f  = io.open(userModuleTFN,"w")
          if (f) then
             f:write(s0,s1,s2)
             f:close()
          end
+         posix.unlink(userModuleTFN .. "~")
          dbg.print{"Wrote: ",userModuleTFN,"\n"}
          local buildT   = t2-t1
          local ancient2 = math.min(buildT * 120, ancient)
@@ -431,7 +433,7 @@ function M.build(self, fast)
       end
       cTimer:done(doneMsg)
       dbg.print{"Transfer from userModuleT to moduleT\n"}
-      for k, v in pairs(userModuleT) do
+      for k, v in Pairs(userModuleT) do
          dbg.print{"k: ",k,"\n"}
          moduleT[k] = userModuleT[k]
       end

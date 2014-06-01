@@ -651,11 +651,13 @@ function M.reload_sticky(self, force)
       return
    end
 
-   local mt     = MT:mt()
-
+   local mt       = MT:mt()
    local stuckA   = {}
    local unstuckA = {}
    local stickyA  = mt:getStickyA()
+   local mcp_old  = mcp
+   mcp            = MCP
+   local reload   = false
    for i = 1, #stickyA do
       local entry = stickyA[i]
       local mname = MName:new("entryT",entry)
@@ -663,22 +665,27 @@ function M.reload_sticky(self, force)
       if (t.fn == entry.FN) then
          local ma = {}
          ma[1] = mname
-         MCP:load(ma)
+         mcp:load(ma)
       end
       local sn = mname:sn()
-      if (mt:have(sn,"active")) then
-         local j   = #stuckA+1
-         stuckA[j] = { string.format("%3d)",j) , mt:fullName(sn) }
-      else
-         local j   = #unstuckA+1
+      if (not mt:have(sn,"active")) then
+         local j     = #unstuckA+1
          unstuckA[j] = { string.format("%3d)",j) , mname:usrName() }
+      else
+         reload = true
       end
    end
+   mcp = mcp_old
 
-   if (#stuckA > 0) then
-      io.stderr:write("\nThe following sticky modules were not unloaded:\n")
-      io.stderr:write("   (Use \"module --force purge\" to unload):\n\n")
-      local ct = ColumnTable:new{tbl=stuckA, gap=0}
+   if (reload) then
+      io.stderr:write("\nThe following modules were not unloaded:\n")
+      io.stderr:write("   (Use \"module --force purge\" to unload all):\n\n")
+      local b  = mt:list("fullName","active")
+      local a  = {}
+      for i = 1, #b do
+         a[#a+1] = {"  " .. tostring(i) .. ")", b[i] }
+      end
+      local ct = ColumnTable:new{tbl=a, gap=0}
       io.stderr:write(ct:build_tbl(),"\n")
    end
    if (#unstuckA > 0) then
@@ -690,57 +697,8 @@ function M.reload_sticky(self, force)
    dbg.fini("Master:reload_sticky")
 end
 
-----------------------------------------------------------------------------
----- Master:versionFile(): This routine is given the absolute path to a
-----                       .version file.  It checks to make sure that it is
-----                       a valid TCL file.  It then uses the
-----                       ModulesVersion.tcl script to return what the value
-----                       of "ModulesVersion" is.
---
---modV = false
---function M.versionFile(path)
---   dbg.start{"Master:versionFile(",path,")"}
---   local f       = io.open(path,"r")
---   if (not f)                        then
---      dbg.print{"could not find: ",path,"\n"}
---      dbg.fini("Master:versionFile")
---      return nil
---   end
---   local s       = f:read("*line")
---   f:close()
---   if (not s:find("^#%%Module"))      then
---      dbg.print{"could not find: #%Module\n"}
---      dbg.fini("Master:versionFile")
---      return nil
---   end
---   local cmd = pathJoin(cmdDir(),"ModulesVersion.tcl") .. " " .. path
---   local s = capture(cmd):trim()
---   assert(load(s))()
---   local version = modV.version
---   if (modV.date ~= "***") then
---     local a = {}
---     for s in modV.date:split("/") do
---        a[#a + 1] = tonumber(s)
---     end
---
---     local epoch   = os.time{year = a[1], month = a[2], day = a[3]}
---     local current = os.time()
---
---     if (epoch < current) then
---        LmodMessage("The default version for module \"",myModuleName(),
---                    "\" is changing on ", t.date, " from ",modV.version,
---                    " to ", modV.newVersion,"\n")
---        version = t.version
---     else
---        version = t.newVersion
---     end
---   end
---   dbg.fini("Master:versionFile")
---   return version
---end
-
 --------------------------------------------------------------------------
---  All these routines in this block to the end are part of "avail"
+--  All these routines from here to the end are part of "avail"
 --------------------------------------------------------------------------
 
 
@@ -755,32 +713,37 @@ local function findDefault(mpath, sn, versionA)
 
    local marked   = false
    local localDir = true
-   local path     = pathJoin(mpath,sn)
-   local default  = abspath(pathJoin(path, "default"), localDir)
-   if (default) then
+   local path     = abspath(pathJoin(mpath,sn))
+   local default  = abspath_localdir(pathJoin(path, "default"))
+   if (not isFile(default)) then
       marked   = true
    else
-      local vFn = abspath(pathJoin(path,".version"), localDir)
-      if (isFile(vFn)) then
-         local vf = versionFile(vFn)
-         if (vf) then
-            marked = true
-            local f = pathJoin(path,vf)
-            default = abspath(f,localDir)
-            --dbg.print{"(1) f: ",f," default: ", default, "\n"}
-            if (default == nil) then
-               local fn = vf .. ".lua"
-               local f  = pathJoin(path,fn)
-               default  = abspath(f,localDir)
-               dbg.print{"(2) f: ",f," default: ", default, "\n"}
-            end
-            --dbg.print{"(3) default: ", default, "\n"}
+      local dfltA = {"/.modulerc", "/.version" }
+      local vf    = false
+      for i = 1, #dfltA do
+         local n   = dfltA[i]
+         local vFn = pathJoin(path,n)
+         if (isFile(vFn)) then
+            vf = versionFile(n, sn, vFn)
+            break;
          end
+      end
+      if (vf) then
+         marked = true
+         default     = pathJoin(path,vf)
+         --dbg.print{"(1) f: ",f," default: ", default, "\n"}
+         if (default == nil) then
+            local fn = vf .. ".lua"
+            default  = pathJoin(path,fn)
+            dbg.print{"(2) f: ",f," default: ", default, "\n"}
+         end
+         --dbg.print{"(3) default: ", default, "\n"}
       end
    end
 
    if (not default) then
-      default = abspath(versionA[#versionA].file, localDir)
+      local d, bn = splitFileName(versionA[#versionA].file)
+      default     = pathjoin(abspath(d), bn)
    end
    dbg.print{"default: ", default,"\n"}
 
@@ -826,10 +789,15 @@ local function availEntry(defaultOnly, terse, mpath, szA, searchA, sn, name,
       end
    end
 
-   dbg.print{"defaultOnly: ",defaultOnly, ", defaultModuleT.fn: ",defaultModuleT.fn,
-             ", f: ",f,", abspath(f, localdir): ",abspath(f, localdir),"\n"}
+   local f_orig = f
+   local d, bn  = splitFileName(f)
+   f            = pathJoin(abspath(d),bn)
 
-   if (defaultOnly and defaultModuleT.fn ~= abspath(f, localdir)) then
+   dbg.print{"defaultOnly: ",defaultOnly, ", defaultModuleT.fn: ",defaultModuleT.fn,
+             ", f_orig: ",f_orig,", f: ", f, "\n"}
+
+   --if (defaultOnly and defaultModuleT.fn ~= abspath(f, localdir)) then
+   if (defaultOnly and defaultModuleT.fn ~= f) then
       found = false
    end
 
@@ -863,12 +831,13 @@ local function availEntry(defaultOnly, terse, mpath, szA, searchA, sn, name,
       dbg.print{"defaultModuleT.fn: ",defaultModuleT.fn,
                 ", kind: ", defaultModuleT.kind,
                 ", num: ",  defaultModuleT.num,
-                ", f: ", f,
-                ", abspath(f, localdir): ",abspath(f, localdir),
+                ", f_orig: ", f_orig,
+                ", f: ",f,
                 "\n"}
 
 
-      if ((defaultModuleT.fn == abspath(f, localdir)) and
+      --if ((defaultModuleT.fn == abspath(f, localdir)) and
+      if ((defaultModuleT.fn == f) and
           (defaultModuleT.num > 1) and not defaultOnly ) then
          dflt = Default
          legendT[Default] = "Default Module"
@@ -880,8 +849,8 @@ local function availEntry(defaultOnly, terse, mpath, szA, searchA, sn, name,
       local entry = dbT[sn]
       if (entry) then
          dbg.print{"Found dbT[sn]\n"}
-         if (entry[f]) then
-            propT =  entry[f].propT or {}
+         if (entry[f_orig]) then
+            propT =  entry[f_orig].propT or {}
          end
       else
          dbg.print{"Did not find dbT[sn]\n"}
@@ -1010,9 +979,6 @@ function M.avail(argA)
 
    local aa        = {}
 
-
-   dbg.print{"locationT: ",tostring(locationT),"\n"}
-
    if (terse) then
       dbg.print{"doing --terse\n"}
       for ii = 1, #mpathA do
@@ -1055,7 +1021,7 @@ function M.avail(argA)
    end
 
 
-   if (not expert()) then
+   if (not quiet()) then
       aa = hook.apply("msgHook", "avail", aa)
    end
    pcall(pager,io.stderr,concatTbl(aa,""))
