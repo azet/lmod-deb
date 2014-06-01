@@ -1,11 +1,11 @@
-diff --git a/Makefile.in b/Makefile.in
-index 5dbf012..6b92858 100644
---- a/Makefile.in
-+++ b/Makefile.in
-@@ -30,14 +30,14 @@ GIT_VERSION               := $(shell if [ -n "$(GIT_PROG)" -a -d .git ]; then lm
+Index: lmod-deb/Makefile.in
+===================================================================
+--- lmod-deb.orig/Makefile.in	2014-06-01 18:01:45.975488817 -0500
++++ lmod-deb/Makefile.in	2014-06-01 18:02:24.106173307 -0500
+@@ -36,14 +36,14 @@
  prefix		  	  := @prefix@
  package		  	  := lmod
- version		  	  := $(shell cd ./src; $(PATH_TO_LUA)/lua -e "V=require('Version'); print(V.tag())")
+ version		  	  := $(shell cd $(PATH_TO_SRC)/src; $(PATH_TO_LUA)/lua -e "V=require('Version'); print(V.tag())")
 -PKGV		  	  := $(prefix)/$(package)/$(version)
 -PKG		  	  := $(prefix)/$(package)/$(package)
 -LIBEXEC		  	  := $(prefix)/$(package)/$(version)/libexec
