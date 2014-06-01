@@ -37,8 +37,6 @@
 --     communicates what modules are loaded or inactive and so on between
 --     module commands.
 
-
-
 require("strict")
 _ModuleTable_      = ""
 local DfltModPath  = DfltModPath
@@ -326,9 +324,11 @@ local function buildAllLocWmoduleT(moduleT, mpathA, locationT, availT)
          for i = 1, #versionA do
             local v = versionA[i]
             if (v.markedDefault) then
-               local num = math.max(#versionA, #pathA)
-               local fn  = abspath(v.file, true)
+               local num  = math.max(#versionA, #pathA)
+               local d, f = splitFileName(v.file)
+               local fn   = pathJoin(abspath(d), f)
                locationT[sn].default = {fn = fn, kind="marked", num = num}
+               --locationT[sn].default = {fn = v.file, kind="marked", num = num}
                found = true
                break
             end
@@ -349,7 +349,9 @@ local function buildAllLocWmoduleT(moduleT, mpathA, locationT, availT)
             end
             sum = sum + num
          end
-         local fn              = abspath(lastValue.file, true)
+         local d, f            = splitFileName(lastValue.file)
+         local fn              = pathJoin(abspath(d), f)
+         --local fn              = lastValue.file
          locationT[sn].default = {fn = fn, kind = "last", num = sum}
       end
    end
@@ -368,10 +370,12 @@ local function build_locationTbl(mpathA)
    dbg.start{"MT:build_locationTbl(mpathA)"}
    local locationT = {}
    local availT    = {}
-
+   local Pairs     = dbg.active() and pairsByKeys or pairs
 
    if (varTbl[ModulePath] == nil or varTbl[ModulePath]:expand() == "") then
-      LmodError("MODULEPATH is undefined\n")
+      dbg.print{"MODULEPATH is undefined\n"}
+      dbg.fini("MT:build_locationTbl")
+      return {}, {}
    end
 
    local fast      = true
@@ -392,7 +396,7 @@ local function build_locationTbl(mpathA)
 
    if (dbg.active()) then
       dbg.print{"availT: \n"}
-      for mpath, vv in pairs(availT) do
+      for mpath, vv in Pairs(availT) do
          dbg.print{"  mpath: ", mpath,":\n"}
 
          for sn , v in pairsByKeys(vv) do
@@ -404,7 +408,7 @@ local function build_locationTbl(mpathA)
          end
       end
       dbg.print{"locationT: \n"}
-      for sn, vv in pairs(locationT) do
+      for sn, vv in Pairs(locationT) do
          dbg.print{"  sn: ", sn,":\n"}
          for i = 1, #vv do
             dbg.print{"    ",vv[i].file,"\n"}
@@ -437,7 +441,7 @@ end
 ------------------------------------------------------------------------
 -- MT:new(): local ctor for MT.  It uses [[s]] to be the initial value.
 
-local function new(self, s)
+local function new(self, s, restore)
    dbg.start{"MT:new()"}
    local o            = {}
 
@@ -466,13 +470,15 @@ local function new(self, s)
    local currentMPATH  = getenv(ModulePath)
    o.systemBaseMPATH   = path_regularize(currentMPATH)
 
-   dbg.print{"systemBaseMPATH: \"", currentMPATH, "\"\n"}
+   dbg.print{"systemBaseMPATH:       \"", currentMPATH, "\"\n"}
+   dbg.print{"(1) o.systemBaseMPATH: \"", o.systemBaseMPATH, "\"\n"}
    if (not s) then
       dbg.print{"setting systemBaseMPATH: ", currentMPATH, "\n"}
       varTbl[DfltModPath] = Var:new(DfltModPath, currentMPATH)
       o:buildBaseMpathA(currentMPATH)
       dbg.print{"Initializing ", DfltModPath, ":", currentMPATH, "\n"}
    else
+      dbg.print{"s: ",s,"\n"}
       assert(load(s))()
       local _ModuleTable_ = systemG._ModuleTable_
 
@@ -489,7 +495,9 @@ local function new(self, s)
          s_loadOrder = icount
       end
       o._MPATH = concatTbl(o.mpathA,":")
+      dbg.print{"(1) o._MPATH: ",o._MPATH,"\n"}
       local baseMPATH = concatTbl(o.baseMpathA,":")
+      dbg.print{"(2) o.systemBaseMPATH: \"", o.systemBaseMPATH, "\"\n"}
       dbg.print{"baseMPATH: ", baseMPATH, "\n"}
 
       if (_ModuleTable_.systemBaseMPATH == nil) then
@@ -506,9 +514,8 @@ local function new(self, s)
       else
          dbg.print{"currentMPATH:        ",currentMPATH,"\n"}
          dbg.print{"_MPATH:              ",o._MPATH,"\n"}
-         dbg.print{"o.systemBaseMPATH:   ",o.systemBaseMPATH,"\n"}
          dbg.print{"baseMPATH:           ",o.systemBaseMPATH,"\n"}
-         if (o.systemBaseMPATH == currentMPATH) then
+         if (o._MPATH ~= currentMPATH and not restore) then
             o:resolveMpathChanges(currentMPATH, baseMPATH)
          end
       end
@@ -573,7 +580,7 @@ function M.getShortTime(self)
 end
 
 function M.setRebuildTime(self, long, short)
-   dbg.start{"MT:setRebuildTime(long: ",long,", short: ",short,")"}
+   dbg.start{"MT:setRebuildTime(long: ",long,", short: ",short,")",level=2}
    self.c_rebuildTime = long
    self.c_shortTime   = short
    dbg.fini("MT:setRebuildTime")
@@ -603,7 +610,7 @@ function M.mt(self)
       dbg.start{"mt()"}
       s_mt               = new(self, getMT())
       s_mtA[#s_mtA+1]    = s_mt
-      dbg.print{"Original s_mtA[",#s_mtA,"]: ",tostring(s_mtA[#s_mtA]),"\n"}
+      dbg.print{"Original s_mtA[",#s_mtA,"]: ",tostring(s_mtA[#s_mtA]),"\n", level=2}
       M.cloneMT(self)   -- Save original MT in stack
       varTbl[ModulePath] = Var:new(ModulePath, getenv(ModulePath))
       setupMPATH(s_mt, varTbl[ModulePath]:expand())
@@ -611,7 +618,8 @@ function M.mt(self)
       if (not s_mt._same) then
          s_mt:reloadAllModules()
       end
-      dbg.print{"s_mt: ",tostring(s_mt), " s_mtA[",#s_mtA,"]: ",tostring(s_mtA[#s_mtA]),"\n"}
+      dbg.print{"s_mt: ",tostring(s_mt), " s_mtA[",#s_mtA,"]: ",tostring(s_mtA[#s_mtA]),"\n",
+                level=2}
       dbg.fini("mt")
    end
    return s_mt
@@ -643,7 +651,7 @@ end
 function M.popMT()
    dbg.start{"MT.popMT()"}
    s_mt = s_mtA[#s_mtA-1]
-   dbg.print{"Now using s_mtA[",#s_mtA-1,"]: ",tostring(s_mt),"\n"}
+   dbg.print{"Now using s_mtA[",#s_mtA-1,"]: ",tostring(s_mt),"\n", level=2}
    s_mtA[#s_mtA] = nil    -- mark for garage collection
    dbg.fini("MT.popMT")
 end
@@ -654,8 +662,8 @@ end
 
 function M.origMT()
    dbg.start{"MT.origMT()"}
-   dbg.print{"Original s_mtA[1]: ",tostring(s_mtA[1]),"\n"}
-   dbg.print{"s_mtA[1].shortTime: ",s_mtA[1].shortTime,"\n"}
+   dbg.print{"Original s_mtA[1]: ",tostring(s_mtA[1]),"\n", level=2}
+   dbg.print{"s_mtA[1].shortTime: ",s_mtA[1].shortTime,"\n", level=2}
    dbg.fini("MT.origMT")
    return s_mtA[1]
 end
@@ -695,13 +703,25 @@ function M.getMTfromFile(self,t)
    -- Save module name in hash table "t"
    -- with Hash Sum as value
 
-   local l_mt   = new(self, s)
-   local mpath  = l_mt._MPATH
-   local t      = {}
-   local a      = {}  -- list of "worker-bee" modules
-   local m      = {}  -- list of "manager"    modules
+   local restore = true
+   local l_mt    = new(self, s, restore)
+   local mpath   = l_mt._MPATH
 
    local activeA = l_mt:list("userName","active")
+
+   ---------------------------------------------
+   -- If any module specified in the "default" file
+   -- is a default then use the short name.  This way
+   -- getting the modules from the "getdefault" specified
+   -- file will work even when the defaults have changed.
+   local t = {}
+
+   for i = 1,#activeA do
+      local      sn = activeA[i].sn
+      t[sn]         = l_mt:getHash(sn)
+      dbg.print{"sn: ",sn,", hash: ", t[sn], "\n"}
+   end
+
 
    local savedBaseMPATH = concatTbl(l_mt.baseMpathA,":")
    dbg.print{"Saved baseMPATH: ",savedBaseMPATH,"\n"}
@@ -731,9 +751,9 @@ function M.getMTfromFile(self,t)
    -- Clear MT and load modules from saved modules stored in
    -- "t" from above.
    local sbMP = self.systemBaseMPATH
-   dbg.print{"mt (self): ", tostring(self), "\n"}
+   dbg.print{"mt (self): ", tostring(self), "\n", level=2}
    s_mt = new(self,nil)
-   dbg.print{"(1) s_mt: ", tostring(s_mt), "\n"}
+   dbg.print{"(1) s_mt: ", tostring(s_mt), "\n", level=2}
    s_mt:pushMT()
 
    ------------------------------------------------------------
@@ -781,8 +801,8 @@ function M.getMTfromFile(self,t)
    -- Now check to see that all requested modules got loaded.
    activeA = s_mt:list("userName","active")
    if (#activeA == 0 ) then
-      LmodWarning("You have no modules loaded because the collection \"",a,
-                     "\" is empty!\n")
+      LmodWarning("You have no modules loaded because the collection \"",
+                  collectionName, "\" is empty!\n")
    end
    dbg.print{"#activeA: ",#activeA,"\n"}
    local activeT = {}
@@ -816,8 +836,9 @@ function M.getMTfromFile(self,t)
    aa = {}
    s_mt:setHashSum()
    for sn, v  in pairs(t) do
-      if(v.hash ~= s_mt:getHash(sn)) then
-         aa[#aa + 1] = v.name
+      dbg.print{"HASH sn: ",sn, ", t hash: ",v, "s hash: ", s_mt:getHash(sn), "\n"}
+      if(v ~= s_mt:getHash(sn)) then
+         aa[#aa + 1] = sn
       end
    end
 
@@ -1061,7 +1082,8 @@ function M.reloadAllModules(self)
       end
       count       = count + 1
       if (count > ncount) then
-         LmodError("ReLoading more than ", ncount, " times-> exiting.\n")
+         dbg.print{"ReLoading more than ", ncount, " times-> exiting.\n"}
+         return
       end
       done = self:sameMPATH(varTbl[ModulePath]:expand())
    end
@@ -1071,7 +1093,7 @@ function M.reloadAllModules(self)
       LmodError("MODULEPATH has changed: run \"module update\" to repair.\n")
    end
    dbg.fini("MT:reloadAllModules")
-   return not changed
+   return
 end
 
 --------------------------------------------------------------------------
@@ -1239,14 +1261,6 @@ function M.have(self, sn, status)
    return ((status == "any") or (status == entry.status))
 end
 
-function M.getHash(self, sn)
-   local mT    = self.mT
-   local entry = mT[sn]
-   if (entry == nil) then
-      return nil
-   end
-   return entry.hash
-end
 
 function M.hideHash(self)
    local mT   = self.mT
@@ -1719,8 +1733,8 @@ end
 --                   removed.
 
 function M.serializeTbl(self, state)
-   dbg.print{"self: ",tostring(self),"\n"}
-   dbg.print{"s_mt: ",tostring(s_mt),"\n"}
+   dbg.print{"self: ",tostring(self),"\n", level=2}
+   dbg.print{"s_mt: ",tostring(s_mt),"\n", level=2}
 
    s_mt.activeSize = self:setLoadOrder()
 

@@ -1,7 +1,13 @@
-TOOL_SRC                  := $(wildcard tools/*.lua)
+PATH_TO_SRC               := @PATH_TO_SRC@
+path_to_src               := PATH_TO_SRC
+ifeq ($(PATH_TO_SRC),@$(path_to_src)@)
+  PATH_TO_SRC             := .
+endif
+
+TOOL_SRC                  := $(wildcard $(PATH_TO_SRC)/tools/*.lua)
 HAVE_LUA_JSON             := @HAVE_LUA_JSON@
 ifeq ($(HAVE_LUA_JSON),yes)
-  TOOL_SRC                := $(filter-out tools/json.lua, $(TOOL_SRC))
+  TOOL_SRC                := $(filter-out $(PATH_TO_SRC)/tools/json.lua, $(TOOL_SRC))
 endif
 
 LMOD_FULL_SETTARG_SUPPORT := $(shell echo "@SETTARG@"       | tr '[:upper:]' '[:lower:]')
@@ -22,14 +28,14 @@ PATH_TO_LUA	  	  := @PATH_TO_LUA@
 PATH_TO_PAGER	  	  := @PATH_TO_PAGER@
 PATH_TO_TCLSH             := @PATH_TO_TCLSH@
 MODULEPATH_ROOT   	  := @MODULEPATH_ROOT@
-VERSION_SRC	  	  := src/Version.lua
+VERSION_SRC	  	  := $(PATH_TO_SRC)/src/Version.lua
 LUA_INCLUDE       	  := @LUA_INCLUDE@
 UPDATE_SYSTEM_FN  	  := @UPDATE_SYSTEM_FN@
 GIT_PROG                  := @PATH_TO_GIT@
 GIT_VERSION               := $(shell if [ -n "$(GIT_PROG)" -a -d .git ]; then lmodV=`git describe --always`; echo "($$lmodV)"; else echo "@git@"; fi)
 prefix		  	  := @prefix@
 package		  	  := lmod
-version		  	  := $(shell cd ./src; $(PATH_TO_LUA)/lua -e "V=require('Version'); print(V.tag())")
+version		  	  := $(shell cd $(PATH_TO_SRC)/src; $(PATH_TO_LUA)/lua -e "V=require('Version'); print(V.tag())")
 PKGV		  	  := $(prefix)/$(package)/$(version)
 PKG		  	  := $(prefix)/$(package)/$(package)
 LIBEXEC		  	  := $(prefix)/$(package)/$(version)/libexec
@@ -50,14 +56,16 @@ STANDALONE_PRGM   	  := src/lmod.in.lua src/addto.in.lua src/getmt.in.lua src/pr
                              src/spider.in.lua src/processModuleUsage.in.lua src/reportUsers.in.lua   \
                              src/clearMT_cmd.in.lua src/ml_cmd.in.lua src/spiderCacheSupport.in.lua   \
                              src/sh_to_modulefile.in.lua
+STANDALONE_PRGM           := $(patsubst %, $(PATH_TO_SRC)/%, $(STANDALONE_PRGM))
 SHELL_INIT	  	  := bash.in csh.in ksh.in tcsh.in zsh.in sh.in perl.in                       \
                              env_modules_python.py.in lmod_bash_completions lmodrc.lua
-SHELL_INIT	  	  := $(patsubst %, init/%, $(SHELL_INIT))
+SHELL_INIT	  	  := $(patsubst %, $(PATH_TO_SRC)/init/%, $(SHELL_INIT))
 
-ZSH_FUNCS                 := init/zsh/_ml init/zsh/_module
+ZSH_FUNCS                 := _ml _module
+ZSH_FUNCS                 := $(patsubst %, $(PATH_TO_SRC)/init/zsh/%, $(ZSH_FUNCS))
 
 STARTUP		  	  := profile.in cshrc.in
-STARTUP		  	  := $(patsubst %, init/%, $(STARTUP))
+STARTUP		  	  := $(patsubst %, $(PATH_TO_SRC)/init/%, $(STARTUP))
 
 MAIN_DIR	  	  := Makefile.in INSTALL configure README_lua_modulefiles.txt \
                              README README.old License
@@ -73,13 +81,13 @@ CONTRIB_DIRS           	  :=  \
                               TACC                              \
                               tricky_modulefiles
 
-CONTRIB                   := $(patsubst %, contrib/%, $(CONTRIB_DIRS))
-lua_code	  	  := $(filter-out %.in.lua, $(wildcard src/*.lua))   \
-                             $(wildcard src/*.tcl)
+CONTRIB                   := $(patsubst %, $(PATH_TO_SRC)/contrib/%, $(CONTRIB_DIRS))
+lua_code	  	  := $(filter-out %.in.lua, $(wildcard $(PATH_TO_SRC)/src/*.lua))   \
+                             $(wildcard $(PATH_TO_SRC)/src/*.tcl)
 VDATE		  	  := $(shell date +'%F %H:%M')
 
-ComputeHashSum    	  := src/computeHashSum.in.lua
-spiderCacheSupportCMD     := lua src/spiderCacheSupport.in.lua
+ComputeHashSum    	  := $(PATH_TO_SRC)/src/computeHashSum.in.lua
+spiderCacheSupportCMD     := lua $(PATH_TO_SRC)/src/spiderCacheSupport.in.lua
 
 HAVE_LUA_TERM             := @HAVE_LUA_TERM@
 ifneq ($(HAVE_LUA_TERM),yes)
@@ -162,11 +170,11 @@ spiderCacheSupport:
                                  >> $(DESTDIR)$(INIT)/lmodrc.lua;
 
 src/computeHashSum: $(ComputeHashSum)
-	$(MAKE) FILELIST="$^" DIRLOC="src"                __installMe
+	$(MAKE) FILELIST="$^" DIRLOC="$(prefix)/src"                __installMe
 	chmod +x $@
 
 pkgs:
-	cd pkgs; \
+	cd $(PATH_TO_SRC)/pkgs; \
         $(MAKE) LUA_INC=$(LUA_INCLUDE)  LIB=$(DESTDIR)$(LIB) \
                 SHARE=$(DESTDIR)$(LIBEXEC) install
 
@@ -175,7 +183,7 @@ zsh_tab_funcs: $(ZSH_FUNCS)
           cp $^ $(DESTDIR)$(ZSH_SITE_FUNCTIONS_DIR);                \
         fi
 
-makefile: Makefile.in config.status
+makefile: $(PATH_TO_SRC)/Makefile.in config.status
 	./config.status $@
 
 config.status:
@@ -283,7 +291,7 @@ libexec:  $(lua_code)
 Inst_Tools: $(TOOL_SRC)
 	$(MAKE) FILELIST="$^" DIRLOC=$(DESTDIR)$(TOOLS) __installMe
 
-Inst_Shells: shells/*.lua
+Inst_Shells: $(PATH_TO_SRC)/shells/*.lua
 	$(MAKE) FILELIST="$^" DIRLOC=$(DESTDIR)$(SHELLS) __installMe
 
 Inst_Settarg: $(SETTARG_SOURCE)
@@ -295,7 +303,7 @@ Inst_Lmod_MF: $(LMOD_MF_SOURCE)
 
 clean:
 	$(RM) config.log
-	cd pkgs; $(MAKE) LIB=$(DESTDIR)$(LIB) SHARE=$(DESTDIR)$(LIBEXEC) clean
+	cd $(PATH_TO_SRC)/pkgs; $(MAKE) LIB=$(DESTDIR)$(LIB) SHARE=$(DESTDIR)$(LIBEXEC) clean
 
 clobber: clean
 

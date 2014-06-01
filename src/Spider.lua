@@ -58,6 +58,7 @@ local max          = math.max
 local posix        = require("posix")
 local systemG      = _G
 local gettimeofday = posix.gettimeofday
+local sort         = table.sort
 local timer        = require("Timer"):timer()
 local function nothing()
 end
@@ -101,9 +102,13 @@ function Spider_append_path(kind, t)
       processNewModulePATH(value)
       dbg.fini(kind)
    elseif (name == "PATH") then
+      dbg.start{kind, "(PATH: \"",name,"\", value=\"",value,"\")"}
       processPATH(value)
+      dbg.fini(kind)
    elseif (name == "LD_LIBRARY_PATH") then
+      dbg.start{kind, "(LD_LIBRARY_PATH: \"",name,"\", value=\"",value,"\")"}
       processLPATH(value)
+      dbg.fini(kind)
    end
 end
 
@@ -163,26 +168,39 @@ local function findMarkedDefault(mpath, path)
    local mt       = MT:mt()
    local localDir = true
    dbg.start{"Spider:findMarkedDefault(",mpath,", ", path,")"}
-
-   local default = abspath(path .. "/default", localDir)
+   mpath         = abspath(mpath)
+   path          = abspath(path)
+   local i,j     = path:find(mpath)
+   local sn      = ""
+   if (j and path:sub(j+1,j+1) == '/') then
+      sn = path:sub(j+2)
+   end
+   local localdir = true
+   local default  = pathJoin(path, "default")
+   default        = abspath_localdir(default)
    if (default == nil) then
-      local vFn = abspath(pathJoin(path,".version"), localDir)
-      if (isFile(vFn)) then
-         local vf = versionFile(vFn)
-         if (vf) then
-            local f = pathJoin(path,vf)
-            default = abspath(f,localDir)
-            if (default == nil) then
-               local fn = vf .. ".lua"
-               local f  = pathJoin(path,fn)
-               default  = abspath(f,localDir)
-               dbg.print{"(2) f: ",f," default: ", default, "\n"}
-            end
+      local dfltA = {"/.modulerc", "/.version"}
+      local vf    = false
+      for i = 1, #dfltA do
+         local n   = dfltA[i]
+         local vFn = abspath_localdir(pathJoin(path, n))
+         if (isFile(vFn)) then
+            vf = versionFile(n, sn, vFn)
+            break
+         end
+      end
+      if (vf) then
+         local f = pathJoin(path,vf)
+         default = abspath_localdir(f)
+         if (default == nil) then
+            local fn = vf .. ".lua"
+            local f  = pathJoin(path,fn)
+            default  = abspath_localdir(f)
          end
       end
    end
    if (default) then
-      default = abspath(default, localDir)
+      default = abspath_localdir(default)
    end
    dbg.print{"(4) default: \"",default,"\"\n"}
 
@@ -204,9 +222,7 @@ end
 local function registerModuleT(full, sn, f, markedDefault)
    local t = {}
 
-   local localdir  = true
-
-   local fabs      = abspath(f, localdir)
+   local fabs      = abspath_localdir(f)
    t.path          = f
    t.name          = sn
    t.name_lower    = sn:lower()
@@ -245,8 +261,14 @@ function M.findModulesInDir(mpath, path, prefix, moduleT)
    local accept_fn       = accept_fn
 
    for file in lfs.dir(path) do
-      if (not ignoreT[file] and file:sub(-1,-1) ~= "~" and
-          file:sub(1,8) ~= ".version") then
+      local firstChar = file:sub(1,1)
+      local lastChar  = file:sub(-1,-1)
+      if (not ignoreT[file] and lastChar ~= "~" and
+          file:sub(1,8) ~= ".version"           and
+          file:sub(1,9) ~= ".modulerc"          and
+          firstChar ~= '#' and lastChar ~= '#'  and
+          file:sub(1,2) ~= ".#" 
+         ) then
          local f        = pathJoin(path,file)
          local readable = posix.access(f,"r")
          local full     = pathJoin(prefix, file):gsub("%.lua","")
@@ -353,8 +375,8 @@ end
 
 function M.buildSpiderDB(self, a, moduleT, dbT)
    dbg.start{"Spider:buildSpiderDB({",concatTbl(a,","),"},moduleT, dbT)"}
-
    dbg.print{"moduleT.version: ",moduleT.version,"\n"}
+   local Pairs = dbg.active() and pairsByKeys or pairs
 
    if (next(moduleT) == nil) then
       dbg.fini("Spider:buildSpiderDB")
@@ -367,7 +389,7 @@ function M.buildSpiderDB(self, a, moduleT, dbT)
       LmodError("old version moduleT\n")
    else
       dbg.print{"Current version moduleT.\n"}
-      for mpath, v in pairs(moduleT) do
+      for mpath, v in Pairs(moduleT) do
          if (type(v) == "table") then
             dbg.print{"mpath: ",mpath, "\n"}
             self:singleSpiderDB(a,v, dbT)
@@ -379,7 +401,8 @@ end
 
 function M.singleSpiderDB(self, a, moduleT, dbT)
    dbg.start{"Spider:singleSpiderDB({",concatTbl(a,","),"},moduleT, dbT)"}
-   for path, value in pairs(moduleT) do
+   local Pairs = dbg.active() and pairsByKeys or pairs
+   for path, value in Pairs(moduleT) do
       dbg.print{"path: ",path,"\n"}
       local name  = value.name
       dbT[name]   = dbT[name] or {}
@@ -405,6 +428,8 @@ function M.singleSpiderDB(self, a, moduleT, dbT)
       if (not found) then
          parent[#parent+1] = entry
       end
+      sort(parent)
+
       t[path].parent = parent
       if (next(value.children)) then
          a[#a+1] = t[path].full
