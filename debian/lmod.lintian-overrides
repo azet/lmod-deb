@@ -1,10 +1,11 @@
 # these are optional language support files
-lmod: csh-considered-harmful usr/share/lmod/5.5.1/init/csh
-lmod: missing-dep-for-interpreter csh => tcsh | csh | c-shell (usr/share/lmod/5.5.1/init/csh)
-lmod: csh-considered-harmful usr/share/lmod/5.5.1/init/cshrc
-lmod: missing-dep-for-interpreter csh => tcsh | csh | c-shell (usr/share/lmod/5.5.1/init/cshrc)
-lmod: csh-considered-harmful usr/share/lmod/5.5.1/init/tcsh
-lmod: missing-dep-for-interpreter csh => tcsh | csh | c-shell (usr/share/lmod/5.5.1/init/tcsh)
-lmod: tclsh-script-but-no-tclsh-dep usr/share/lmod/5.5.1/libexec/ModulesVersion.tcl
-lmod: tclsh-script-but-no-tclsh-dep usr/share/lmod/5.5.1/libexec/tcl2lua.tcl
-lmod: executable-not-elf-or-script usr/share/lmod/5.5.1/init/perl
+lmod: csh-considered-harmful usr/share/lmod/*/init/csh
+lmod: missing-dep-for-interpreter csh => tcsh | csh | c-shell (usr/share/lmod/*/init/csh)
+lmod: csh-considered-harmful usr/share/lmod/*/init/cshrc
+lmod: missing-dep-for-interpreter csh => tcsh | csh | c-shell (usr/share/lmod/*/init/cshrc)
+lmod: csh-considered-harmful usr/share/lmod/*/init/tcsh
+lmod: missing-dep-for-interpreter csh => tcsh | csh | c-shell (usr/share/lmod/*/init/tcsh)
+lmod: tclsh-script-but-no-tclsh-dep usr/share/lmod/*/libexec/ModulesVersion.tcl
+lmod: tclsh-script-but-no-tclsh-dep usr/share/lmod/*/libexec/RC2lua.tcl
+lmod: tclsh-script-but-no-tclsh-dep usr/share/lmod/*/libexec/tcl2lua.tcl
+lmod: executable-not-elf-or-script usr/share/lmod/*/init/perl
