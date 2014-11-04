@@ -1,3 +1,13 @@
+lmod (5.8-1) unstable; urgency=medium
+
+  * Imported Upstream version 5.8 (Closes: #764722)
+  * updated path patch for version 5.8
+  * removed watch file (not working with SF.net)
+  * change standards version to 3.9.5
+  * add short licensetext
+
+ -- Aaron Zauner <azet@azet.org>  Tue, 04 Nov 2014 16:45:19 -0600
+
 lmod (5.6.2-1) unstable; urgency=medium
 
   * Imported Upstream version 5.6.2
