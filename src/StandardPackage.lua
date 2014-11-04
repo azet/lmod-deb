@@ -1,4 +1,9 @@
 --------------------------------------------------------------------------
+-- Fixme
+-- @module StandardPackage
+
+require("strict")
+--------------------------------------------------------------------------
 -- Lmod License
 --------------------------------------------------------------------------
 --
@@ -30,9 +35,7 @@
 --
 --------------------------------------------------------------------------
 
-require("strict")
 require("TermWidth")
-require("fillWords")
 require("string_utils")
 require("fileOps")
 PkgBase         = require("PkgBase")
@@ -80,7 +83,7 @@ local function msg(kind, a)
    local s      = msgT[kind] or ""
    for line in s:split("\n") do
       a[#a+1] = "\n"
-      a[#a+1] = fillWords("",line,twidth)
+      a[#a+1] = line:fillWords("",twidth)
    end
    a[#a+1] = "\n\n"
    return a

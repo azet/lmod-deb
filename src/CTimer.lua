@@ -1,4 +1,10 @@
 --------------------------------------------------------------------------
+-- This class is a singleton to act as a timer.
+-- @classmod CTimer
+
+require("strict")
+
+--------------------------------------------------------------------------
 -- Lmod License
 --------------------------------------------------------------------------
 --
@@ -32,37 +38,53 @@
 --
 --------------------------------------------------------------------------
 
-require("strict")
 require("utils")
 local M       = {}
 local dbg     = require("Dbg"):dbg()
 
 s_cTimer = false
 
-local function new(self, msg, threshold, active)
+local function new(self, msg, threshold, active, timeout)
    local o = {}
    setmetatable(o,self)
    self.__index = self
 
+   timeout     = tonumber(timeout or -1.0)
    o.state     = active and "init" or "dead"
    o.start     = epoch()
    o.msg       = msg
    o.threshold = threshold
-
+   o.timeout   = (timeout > 1.0e-8) and timeout or -1.0
    return o
 end
 
-function M.cTimer(self, msg, threshold, active)
+--------------------------------------------------------------------------
+-- Singleton Class builder
+-- @param self A CTimer object
+-- @param msg stored message
+-- @param threshold Threshold before message is printed.
+-- @param active Active state
+-- @param timeout A timeout (if positive) when an error will be reported.
+-- @return A CTimer singleton object.
+function M.cTimer(self, msg, threshold, active, timeout)
    if (not s_cTimer) then
-      s_cTimer = new(self, msg, threshold, active)
+      s_cTimer = new(self, msg, threshold, active, timeout)
    end
    return s_cTimer
 end
 
+--------------------------------------------------------------------------
+-- Check the time.  Print message if change from start passes the threshold.
+-- @param self A CTimer object
 function M.test(self)
+   local delta   = epoch() - self.start
+   local timeout = self.timeout
+   if (timeout > 0 and delta > timeout) then
+      error()
+   end
+
    if (self.state == "init") then
       dbg.start{"CTimer:test()", level=2}
-      local delta = epoch() - self.start
       dbg.print{"delta: ",delta,"\n"}
       if (delta > self.threshold) then
          io.stderr:write(self.msg)
@@ -72,6 +94,10 @@ function M.test(self)
    end
 end
 
+--------------------------------------------------------------------------
+-- Quit timer
+-- @param self A CTimer object.
+-- @param endMsg ending message.
 function M.done(self,endMsg)
    if (self.state == "activeMsg") then
       io.stderr:write(endMsg,"\n")

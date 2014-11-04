@@ -53,15 +53,19 @@ function Perl.shellFunc(self, k, v)
    -- do nothing: shell functions do not make sense in a perl script.
 end
 
+function Perl.echo(self,...)
+   self:_echo(...)
+end
+
 function Perl.expandVar(self, k, v, vType)
    local lineA = {}
-   v = atSymbolEscaped(doubleQuoteEscaped(tostring(v)))
+   v = v:doubleQuoteString():atSymbolEscaped()
 
    lineA[#lineA + 1] = '$ENV{'
    lineA[#lineA + 1] = k
-   lineA[#lineA + 1] = '}="'
+   lineA[#lineA + 1] = '}='
    lineA[#lineA + 1] = v
-   lineA[#lineA + 1] = "\";\n"
+   lineA[#lineA + 1] = ";\n"
    local line        = concatTbl(lineA,"")
    stdout:write(line)
    dbg.print{   line}

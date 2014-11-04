@@ -1,4 +1,10 @@
 --------------------------------------------------------------------------
+-- A way for client sites to register functions that are defined in
+-- SitePackage.lua
+-- @classmod Hook
+
+require("strict")
+--------------------------------------------------------------------------
 -- Lmod License
 --------------------------------------------------------------------------
 --
@@ -32,12 +38,6 @@
 --
 --------------------------------------------------------------------------
 
---------------------------------------------------------------------------
--- Hook: A way for client sites to register functions that are defined in
---       SitePackage.lua
---
-
-require("strict")
 
 local M={}
 
@@ -45,6 +45,8 @@ local validT =
 {
       ['load']       = false,  -- This load hook is called after a
                                -- modulefile is loaded.
+      unload         = false,  -- This unload hook is called after a
+                               -- modulefile is unloaded.
       parse_updateFn = false,  -- This hook returns the time on the
                                -- timestamp file.
       writeCache     = false,  -- This hook return whether a cache
@@ -57,11 +59,13 @@ local validT =
       groupName      = false,  -- This hook adds the arch and os name
                                -- to moduleT.lua to make it safe on
                                -- shared filesystems.
+      avail          = false,  -- Map directory names to labels
 }
 
 --------------------------------------------------------------------------
--- Hook:register(): Checks for a valid hook name and stores it if valid.
-
+-- Checks for a valid hook name and stores it if valid.
+-- @param name The name of the hook.
+-- @param func The function to store with it.
 function M.register(name, func)
    if (validT[name] ~= nil) then
       validT[name] = func
@@ -72,9 +76,9 @@ function M.register(name, func)
 end
 
 --------------------------------------------------------------------------
--- Hook:apply():  If a valid hook function has been registered then apply
---                it.
-
+-- If a valid hook function has been registered then apply it.
+-- @param name The name of the hook.
+-- @return the results of the hook if it exists.
 function M.apply(name, ...)
    if (validT[name]) then
       return validT[name](...)

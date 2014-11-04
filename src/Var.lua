@@ -1,4 +1,18 @@
 --------------------------------------------------------------------------
+-- This class is manages the hash table that stores the "environment"
+-- variables that Lmod controls.  Each instant of Var holds a single
+-- environment variable, path, local variable, shell function or alias.
+-- This class is at the core of Lmod.  Lmod is all about controlling
+-- the user environment and this is where Lmod does this.
+--
+-- The other point of this class is to check to see when MODULEPATH
+-- has changed.
+--
+-- @classmod Var
+
+require("strict")
+
+--------------------------------------------------------------------------
 -- Lmod License
 --------------------------------------------------------------------------
 --
@@ -32,15 +46,6 @@
 --
 --------------------------------------------------------------------------
 
---------------------------------------------------------------------------
--- Var:  This class is manages the hash table that stores the "environment"
---       variables that Lmod controls.  Each instant of Var holds a single
---       environment variable, path, local variable, shell function or alias.
---       This class is at the core of Lmod.  Lmod is all about controlling
---       the user environment and this is where Lmod does this.
---
---       The other point of this class is to check to see when MODULEPATH
---       has changed.
 
 --------------------------------------------------------------------------
 -- PATH Variables:
@@ -81,7 +86,6 @@
 -- do not allow duplicates.  Then the Var:pop() member function will work
 -- correctly independent of site policy towards duplicates
 
-require("strict")
 require("string_utils")
 require("pairsByKeys")
 require("utils")
@@ -97,7 +101,7 @@ local pow           = math.pow
 local log10         = math.log10
 local huge          = math.huge
 local posix         = require("posix")
-local setenv        = posix.setenv
+local setenv_posix  = posix.setenv
 local systemG       = _G
 local envPrtyName   = "__LMOD_PRIORITY_"
 
@@ -136,7 +140,7 @@ end
 --            "path".  Other functions work similarly.
 
 local function extract(self)
-   local myValue   = self.value or getenv(self.name) or ""
+   local myValue   = self.value or getenv(self.name)
    local pathTbl   = {}
    local imax      = 0
    local imin      = 1
@@ -144,7 +148,7 @@ local function extract(self)
    local sep       = self.sep
    local priorityT = build_priorityT(self)
 
-   if (myValue ~= '') then
+   if (myValue and myValue ~= '') then
       pathA = path2pathA(myValue, sep)
 
       for i,v in ipairs(pathA) do
@@ -179,7 +183,8 @@ function M.new(self, name, value, sep)
    o.name       = name
    o.sep        = sep or ":"
    extract(o)
-   setenv(name, value, true)
+   if (not value) then value = nil end
+   setenv_posix(name, value, true)
    return o
 end
 
@@ -213,13 +218,13 @@ end
 -- chkMP(): This function is called to let Lmod know that the MODULEPATH
 --          has changed.
 
-local function chkMP(name)
+local function chkMP(name, adding, pathEntry)
    if (name == ModulePath) then
       dbg.print{"calling reEvalModulePath()\n"}
       local mt = systemG.MT:mt()
 
       mt:changePATH()
-      mt:reEvalModulePath()
+      mt:reEvalModulePath(adding, pathEntry)
    end
 end
 
@@ -277,17 +282,19 @@ function M.remove(self, value, where, priority)
    where = allow_dups(true) and where or "all"
    local pathA   = path2pathA(value, self.sep)
    local tbl     = self.tbl
+   local adding  = false    
 
    for i = 1, #pathA do
       local path = pathA[i]
       if (tbl[path]) then
          tbl[path] = remFunc(self.tbl[path], where, priority)
-         chkMP(self.name)
+         chkMP(self.name,adding,path)
       end
    end
    local v    = self:expand()
    self.value = v
-   setenv(self.name, v, true)
+   if (not v) then v = nil end
+   setenv_posix(self.name, v, true)
 end
 
 --------------------------------------------------------------------------
@@ -325,7 +332,8 @@ function M.pop(self)
    end
    local v    = self:expand()
    self.value = v
-   setenv(self.name, v, true)
+   if (not v) then v = nil end
+   setenv_posix(self.name, v, true)
    return result
 end
 
@@ -378,6 +386,7 @@ function M.prepend(self, value, nodups, priority)
    local pathA         = path2pathA(value, self.sep)
    local is, ie, iskip = prepend_order(#pathA)
    local isPrepend     = true
+   local adding        = true
 
    local tbl  = self.tbl
    local imin = min(self.imin, 0)
@@ -386,13 +395,14 @@ function M.prepend(self, value, nodups, priority)
       imin       = imin - 1
       local a    = tbl[path] or {}
       tbl[path]  = insertFunc(a, imin, isPrepend, nodups, priority)
-      chkMP(self.name)
+      chkMP(self.name, adding,path)
    end
    self.imin = imin
    
    local v    = self:expand()
    self.value = v
-   setenv(self.name, v, true)
+   if (not v) then v = nil end
+   setenv_posix(self.name, v, true)
 end
 
 --------------------------------------------------------------------------
@@ -405,6 +415,7 @@ function M.append(self, value, nodups, priority)
    priority         = tonumber(priority or "0")
    local pathA      = path2pathA(value, self.sep)
    local isPrepend  = false
+   local adding     = true
 
    local tbl  = self.tbl
    local imax = self.imax
@@ -413,47 +424,51 @@ function M.append(self, value, nodups, priority)
       imax       = imax + 1
       local a    = tbl[path] or {}
       tbl[path]  = insertFunc(a, imax, isPrepend, nodups, priority)
-      chkMP(self.name)
+      chkMP(self.name, adding, path)
    end
    self.imax  = imax
    local v    = self:expand()
    self.value = v
-   setenv(self.name, v, true)
+   if (not v) then v = nil end
+   setenv_posix(self.name, v, true)
 end
 
 --------------------------------------------------------------------------
 -- Master: The following are simple set/unset functions.
 
 function M.set(self,value)
-   self.value = value or ''
+   if (not value) then value = false end
+   self.value = value 
    self.type  = 'var'
-   if (value == '') then value = nil end
-   setenv(self.name, value, true)
+   if (not value) then value = nil end
+   setenv_posix(self.name, value, true)
 end
 
 function M.unset(self)
-   self.value = ''
+   self.value = false
    self.type  = 'var'
-   setenv(self.name, nil, true)
+   setenv_posix(self.name, nil, true)
 end
 
 function M.setLocal(self,value)
+   if (not value) then value = false end
    self.value = value
    self.type  = 'local_var'
 end
 
 function M.unsetLocal(self,value)
-   self.value = ''
+   self.value = false
    self.type  = 'local_var'
 end
 
 function M.setAlias(self,value)
+   if (not value) then value = false end
    self.value = value
    self.type  = 'alias'
 end
 
 function M.unsetAlias(self,value)
-   self.value = ''
+   self.value = false
    self.type  = 'alias'
 end
 
@@ -463,7 +478,7 @@ function M.setShellFunction(self,bash_func,csh_func)
 end
 
 function M.unsetShellFunction(self,bash_func,csh_func)
-   self.value = ''
+   self.value = false
    self.type  = 'shell_function'
 end
 
@@ -490,17 +505,17 @@ function M.expand(self)
 
    local t       = {}
    local pathA   = {}
-   local pathStr = ""
+   local pathStr = false
    local sep     = self.sep
    local factor  = 1
    local prT     = {}
    local maxV    = max(abs(self.imin), self.imax) + 1
    local factor  = math.pow(10,ceil(log10(maxV)+1))
    local resultA = {}
-   
+   local tbl     = self.tbl
 
    -- Step 1: Make a sparse array with path as values
-   for k, vA in pairs(self.tbl) do
+   for k, vA in pairs(tbl) do
       for ii = 1,#vA do
          local pair     = vA[ii]
          local value    = pair[1]
@@ -525,6 +540,18 @@ function M.expand(self)
       pathA[n] = v
    end
 
+   
+   -- Step 2.1: Remove extra trailing empty strings, keep only one.
+
+   local i = n 
+   while (pathA[i] == "") do
+      i = i - 1
+   end
+   i = i + 2
+   for j = i, n do
+      pathA[j] = nil
+   end
+   n = #pathA
    -- Step 3: convert pathA array into "sep" separated string.
    --         Also Handle "" at end of "path"
    if (n == 1 and pathA[1] == "") then
@@ -560,6 +587,8 @@ function M.expand(self)
       end
       priorityStrT[env_name] = concatTbl(sA,';')
    end
+   
+   if (next(tbl) == nil) then pathStr = false end
 
    return pathStr, "path", priorityStrT
 end

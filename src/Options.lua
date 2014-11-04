@@ -1,4 +1,16 @@
 --------------------------------------------------------------------------
+-- Options: This class is the main options parser for Lmod.  It defines
+--          the options it supports and uses Optiks to parse the command
+--          line.  All options values are copied to [[masterTbl]] and
+--          positional arguments are copied to [[masterTbl.pargs]].
+--          The command usage string is retrieved into
+--          [[masterTbl.cmdHelpMsg]].
+--
+-- @classmod Options
+
+require("strict")
+
+--------------------------------------------------------------------------
 -- Lmod License
 --------------------------------------------------------------------------
 --
@@ -32,21 +44,11 @@
 --
 --------------------------------------------------------------------------
 
---------------------------------------------------------------------------
--- Options: This class is the main options parser for Lmod.  It defines
---          the options it supports and uses Optiks to parse the command
---          line.  All options values are copied to [[masterTbl]] and
---          positional arguments are copied to [[masterTbl.pargs]].
---          The command usage string is retrieved into
---          [[masterTbl.cmdHelpMsg]].
-
-require("strict")
-
 Error = nil
 local dbg          = require("Dbg"):dbg()
 local format       = string.format
 local posix        = require("posix")
-local setenv       = posix.setenv
+local setenv_posix = posix.setenv
 local stderr       = io.stderr
 local systemG      = _G
 
@@ -73,15 +75,28 @@ end
 function M.options(self, usage)
 
    local Optiks = require("Optiks")
-
    s_options = new(self)
-
    local cmdlineParser  = Optiks:new{usage   = usage,
                                      error   = LmodWarning,
                                      exit    = nothing,
                                      prt     = prt,
                                      envArg  = os.getenv("LMOD_OPTIONS"),
    }
+
+   local styleA       = {}
+   local icnt         = 0
+   local defaultStyle = "system"
+   
+   for s in LMOD_AVAIL_STYLE:split(":") do
+      icnt = icnt + 1
+      if (s:sub(1,1) == "<" and s:sub(-1,-1) == ">") then
+         s            = s:sub(2,-2)
+         defaultStyle = s
+      elseif (icnt == 1) then
+         defaultStyle = s
+      end
+      styleA[icnt] = s
+   end
 
    cmdlineParser:add_option{
       name   = {"-h","-?","-H","--help"},
@@ -91,10 +106,11 @@ function M.options(self, usage)
    }
 
    cmdlineParser:add_option{
-      name   = {"--topic"},
-      dest   = "topic",
-      action = "store",
-      help   = "help topics: modfuncs envvars",
+      name    = {"-s","--style"},
+      dest    = "availStyle",
+      action  = "store",
+      default = defaultStyle,
+      help    = "Site controlled avail style: "..concatTbl(styleA," ").." (default: "..defaultStyle..")"
    }
 
 
@@ -124,6 +140,13 @@ function M.options(self, usage)
       dest   = "quiet",
       action = "store_true",
       help   = "Do not print out warnings",
+   }
+
+   cmdlineParser:add_option{
+      name   = {"--topic"},
+      dest   = "topic",
+      action = "store",
+      help   = "help topics: modfuncs envvars",
    }
 
    cmdlineParser:add_option{
@@ -246,6 +269,35 @@ function M.options(self, usage)
       help   = "force removal of a sticky module or save an empty collection",
    }
 
+   cmdlineParser:add_option{
+      name   = {"--redirect" },
+      dest   = "redirect",
+      action = "store_true",
+      help   = "Send the output of list, avail, spider to stdout (not stderr)",
+   }
+
+   cmdlineParser:add_option{
+      name   = {"--no_redirect" },
+      dest   = "redirect_off",
+      action = "store_true",
+      help   = "Force output of list, avail and spider to stderr",
+   }
+
+   cmdlineParser:add_option{
+      name   = {"--show_hidden" },
+      dest   = "show_hidden",
+      action = "store_true",
+      help   = "Avail and spider will report hidden modules",
+   }
+
+   cmdlineParser:add_option{
+      name   = {"--spider_timeout" },
+      dest   = "timeout",
+      action = "store",
+      help   = "a timeout for spider",
+      default = 0.0
+   }
+
    local optionTbl, pargs = cmdlineParser:parse(arg)
    local masterTbl        = masterTbl()
    masterTbl.pargs        = pargs
@@ -261,21 +313,29 @@ function M.options(self, usage)
    end
 
    if (optionTbl.twidth) then
-      setenv("LMOD_TERM_WIDTH",tostring(optionTbl.twidth))
-   end
-
-   if (optionTbl.expert) then
-      setenv("LMOD_EXPERT", "1")
-      setenv("LMOD_QUIET",  "1")
-   end
-
-   if (optionTbl.quiet) then
-      setenv("LMOD_QUIET","1")
+      setenv_posix("LMOD_TERM_WIDTH",tostring(optionTbl.twidth),true)
    end
 
    if (optionTbl.novice) then
-      setenv("LMOD_EXPERT", nil)
-      setenv("LMOD_QUIET",  nil)
+      setenv_posix("LMOD_EXPERT", nil,true)
+      setenv_posix("LMOD_QUIET",  nil,true)
+   end
+
+   if (optionTbl.expert) then
+      setenv_posix("LMOD_EXPERT", "1",true)
+      setenv_posix("LMOD_QUIET",  "1",true)
+   end
+
+   if (optionTbl.quiet) then
+      setenv_posix("LMOD_QUIET","1",true)
+   end
+
+   if (optionTbl.redirect) then
+      LMOD_REDIRECT = "yes"
+   end
+
+   if (optionTbl.redirect_off) then
+      LMOD_REDIRECT = "no"
    end
 end
 

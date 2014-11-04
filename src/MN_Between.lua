@@ -1,4 +1,12 @@
 --------------------------------------------------------------------------
+-- This derived class of MName handles the atleast and between modifiers
+-- for both prereq and load.
+-- @classmod MN_Between
+
+
+require("strict")
+
+--------------------------------------------------------------------------
 -- Lmod License
 --------------------------------------------------------------------------
 --
@@ -32,8 +40,6 @@
 --
 --------------------------------------------------------------------------
 
-require("strict")
-
 local M         = inheritsFrom(MName)
 local dbg       = require("Dbg"):dbg()
 local concatTbl = table.concat
@@ -45,7 +51,9 @@ local s_steps = {
    MName.find_between,
 }
 
-
+--------------------------------------------------------------------------
+-- Show the atleast or between modifier.
+-- @param self A MName object
 function M.show(self)
    local a = {}
    a[#a+1] = self._actName
@@ -59,6 +67,9 @@ function M.show(self)
    return concatTbl(a,"")
 end
 
+--------------------------------------------------------------------------
+-- Do a prereq check to see if version is in range.
+-- @param self A MName object
 function M.prereq(self)
    local result  = false
    local mt      = MT:mt()
@@ -79,6 +90,9 @@ function M.prereq(self)
    return result
 end
 
+--------------------------------------------------------------------------
+-- Check to see if the currently loaded module is in range.
+-- @param self A MName object
 function M.isloaded(self)
    local mt        = MT:mt()
    local sn        = self:sn()
@@ -92,6 +106,9 @@ function M.isloaded(self)
    return (left <= pv and pv <= right)
 end
 
+--------------------------------------------------------------------------
+-- Check to see if the isPending module is in range.
+-- @param self A MName object
 function M.isPending(self)
    local mt        = MT:mt()
    local sn        = self:sn()
@@ -106,6 +123,8 @@ function M.isPending(self)
 end
 
 
+--------------------------------------------------------------------------
+-- Return the steps used in the Between class.
 function M.steps()
    return s_steps
 end

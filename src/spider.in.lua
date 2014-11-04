@@ -1,5 +1,10 @@
 #!@path_to_lua@/lua
 -- -*- lua -*-
+
+--------------------------------------------------------------------------
+-- Use command name to add the command directory to the package.path
+-- @script spider
+
 --------------------------------------------------------------------------
 -- Lmod License
 --------------------------------------------------------------------------
@@ -34,9 +39,6 @@
 --
 --------------------------------------------------------------------------
 
-------------------------------------------------------------------------
--- Use command name to add the command directory to the package.path
-------------------------------------------------------------------------
 local LuaCommandName = arg[0]
 local i,j = LuaCommandName:find(".*/")
 local LuaCommandName_dir = "./"
@@ -52,8 +54,8 @@ function cmdDir()
    return LuaCommandName_dir
 end
 
-require("myGlobals")
 require("strict")
+require("myGlobals")
 require("utils")
 require("colorize")
 require("serializeTbl")
@@ -432,6 +434,14 @@ function options()
       default = false,
    }
 
+   cmdlineParser:add_option{
+      name    = {'--preload'},
+      dest    = 'preload',
+      action  = 'store_true',
+      default = false,
+      help    = "Use preloaded modules to build reverseMapT"
+   }
+
    local optionTbl, pargs = cmdlineParser:parse(arg)
 
    for v in pairs(optionTbl) do
@@ -439,6 +449,7 @@ function options()
    end
    masterTbl.pargs = pargs
 
+   Use_Preload = masterTbl.preload
 end
 
 function xmlSoftwarePage(dbT)

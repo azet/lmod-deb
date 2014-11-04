@@ -1,3 +1,9 @@
+--------------------------------------------------------------------------
+-- A collection of useful file operations.
+-- @module fileOps
+
+require("strict")
+
 ------------------------------------------------------------------------
 --
 --  Copyright (C) 2008-2014 Robert McLay
@@ -24,19 +30,15 @@
 --
 --------------------------------------------------------------------------
 
---------------------------------------------------------------------------
--- fileOps: A collection of useful file operations.
-
-
-require("strict")
 require("string_utils")
 local posix     = require("posix")
 local lfs       = require("lfs")
 local concatTbl = table.concat
 
 --------------------------------------------------------------------------
--- findInPath(): find the absolute path to an executable.
-
+-- find the absolute path to an executable.
+-- @param exec Name of executable
+-- @param path The path to use. If nil then use env PATH.
 function findInPath(exec, path)
    local result  = ""
    if ( exec == nil) then return result end
@@ -69,9 +71,9 @@ function findInPath(exec, path)
 end
 
 ------------------------------------------------------------------------
--- isDir(): Return true if path is a directory.  Note that a symlink to
---          a directory is not a directory.
-
+-- Return true if path is a directory.  Note that a symlink to a
+-- directory is not a directory.
+-- @param d A file path
 function isDir(d)
    if (d == nil) then return false end
    local t = posix.stat(d,"type")
@@ -82,8 +84,8 @@ function isDir(d)
 end
 
 --------------------------------------------------------------------------
--- isFile(): Return true if file exists is and is a file or link.
-
+-- Return true if file exists is and is a file or link.
+-- @param fn A file path
 function isFile(fn)
    if (fn == nil) then return false end
    local t = posix.stat(fn,"type")
@@ -94,8 +96,8 @@ function isFile(fn)
 end
 
 --------------------------------------------------------------------------
--- isExec(): Returns true if file is readable and executable.
-
+-- Returns true if file is readable and executable.
+-- @param fn A file path
 function isExec(fn)
    if (fn == nil) then return false end
    local result = posix.access(fn,"rx")
@@ -103,9 +105,8 @@ function isExec(fn)
 end
 
 --------------------------------------------------------------------------
--- dirname(): Return the directory part of path. Will return "./" if path
---            is without a directory.
-
+-- Return the directory part of path. Will return "./" if path is without a directory.
+-- @param path A file path
 function dirname(path)
    if (path == nil) then return nil end
    local result
@@ -119,8 +120,8 @@ function dirname(path)
 end
 
 --------------------------------------------------------------------------
--- extname(): Return the extension of a file or "" if there is none.
-
+--- Return the extension of a file or "" if there is none.
+--  @param path A file path
 function extname(path)
    if (path == nil) then return nil end
    local result
@@ -135,7 +136,8 @@ function extname(path)
 end
 
 --------------------------------------------------------------------------
--- removeExt(): Remove extension from path.
+-- Remove extension from path.
+-- @param path A file path
 
 function removeExt(path)
    if (path == nil) then return nil end
@@ -151,7 +153,8 @@ function removeExt(path)
 end
 
 --------------------------------------------------------------------------
--- barefilename(): return the file name w/o any directory part.
+-- return the file name w/o any directory part.
+-- @param path A file path
 
 function barefilename(path)
    if (path == nil) then return nil end
@@ -166,8 +169,10 @@ function barefilename(path)
 end
 
 --------------------------------------------------------------------------
--- splitFileName(): split a path into a directory and a file.
-
+-- split a path into a directory and a file.
+-- @param path A file path
+-- @return d A directory path
+-- @return f a barefilename
 function splitFileName(path)
    if (path == nil) then return nil, nil end
    local d, f
@@ -183,8 +188,10 @@ function splitFileName(path)
 end
 
 --------------------------------------------------------------------------
--- pathJoin(): Join argument into a path that has single slashes between
---             directory names and no trailing slash.
+-- Join argument into a path that has single slashes between directory
+-- names and no trailing slash.
+-- @return a file path with single slashes between directory names
+-- and no trailing slash.
 
 function pathJoin(...)
    local a = {}
@@ -194,7 +201,7 @@ function pathJoin(...)
       if (v and v ~= '') then
          local vType = type(v)
          if (vType ~= "string") then
-            msg = "bad argument #" .. i .." (string expected, got " .. vType .. " instead)\n"
+            local msg = "bad argument #" .. i .." (string expected, got " .. vType .. " instead)\n"
             assert(vType ~= "string", msg)
          end
       	 v = v:trim()
@@ -226,8 +233,8 @@ function pathJoin(...)
 end
 
 --------------------------------------------------------------------------
--- mkdir_recursive(): Create a new directory recursively.
-
+-- Create a new directory recursively.
+-- @param path A file path
 function mkdir_recursive(path)
    local absolute
    if (path:sub(1,1) == '/') then
@@ -250,7 +257,11 @@ function mkdir_recursive(path)
 end
 
 --------------------------------------------------------------------------
--- abspath(): find true path through symlinks.
+-- find true path through symlinks.
+-- @param path Input path
+-- @param[opt] localDir If true then do not leave the current directory
+-- when following symlinks
+-- @return A absolute path.
 
 function abspath (path, localDir)
    if (path == nil) then return nil end
@@ -296,8 +307,9 @@ function abspath (path, localDir)
 end
 
 --------------------------------------------------------------------------
--- path_regularize(): Remove leading and trail spaces and extra slashes.
-
+-- Remove leading and trail spaces and extra slashes.
+-- @param value A path
+-- @return A clean canonical path.
 function path_regularize(value)
    if value == nil then return nil end
    value = value:gsub("^%s+","")

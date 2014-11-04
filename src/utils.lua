@@ -1,4 +1,10 @@
 --------------------------------------------------------------------------
+-- This is the file that has miscellaneous utility functions.
+-- @module utils
+
+require("strict")
+
+--------------------------------------------------------------------------
 -- Lmod License
 --------------------------------------------------------------------------
 --
@@ -32,36 +38,31 @@
 --
 --------------------------------------------------------------------------
 
---------------------------------------------------------------------------
--- utils.lua:  This is the file that has miscellaneous utility functions.
---------------------------------------------------------------------------
-
-
 require("strict")
 require("fileOps")
 require("string_utils")
 require("parseVersion")
 require("capture")
 
-local Version   = require("Version")
-local base64    = require("base64")
-local dbg       = require("Dbg"):dbg()
-local lfs       = require("lfs")
-local posix     = require("posix")
+local Version      = require("Version")
+local base64       = require("base64")
+local dbg          = require("Dbg"):dbg()
+local lfs          = require("lfs")
+local posix        = require("posix")
+local setenv_posix = posix.setenv
 
-local concatTbl = table.concat
-local decode64  = base64.decode64
-local floor     = math.floor
-local format    = string.format
-local getenv    = os.getenv
-local huge      = math.huge
+local concatTbl    = table.concat
+local decode64     = base64.decode64
+local floor        = math.floor
+local format       = string.format
+local getenv       = os.getenv
+local huge         = math.huge
 
-local rep       = string.rep
-local T0        = os.time()
-local load      = (_VERSION == "Lua 5.1") and loadstring or load
+local rep          = string.rep
+local load         = (_VERSION == "Lua 5.1") and loadstring or load
 
 --------------------------------------------------------------------------
--- abspath(): find true path through symlinks.
+-- find true path through symlinks.
 
 function abspath_localdir (path)
    if (path == nil) then return nil end
@@ -92,7 +93,7 @@ function abspath_localdir (path)
       return nil
    elseif (attr.mode == "link") then
       local rl = posix.readlink(path)
-      dbg.print{"path: ",path,", rl: ",rl,"\n"}
+      --dbg.print{"path: ",path,", rl: ",rl,"\n"}
       if (not rl) then
          lfs.chdir(cwd)
          return nil
@@ -112,8 +113,8 @@ function abspath_localdir (path)
 end
 
 --------------------------------------------------------------------------
--- argsPack():  This is 5.1 Lua function to cover the table.pack function
---              that is in Lua 5.2 and later.
+-- This is 5.1 Lua function to cover the table.pack function
+-- that is in Lua 5.2 and later.
 
 function argsPack(...)
    local arg = { n = select ("#", ...), ...}
@@ -123,9 +124,9 @@ local pack        = (_VERSION == "Lua 5.1") and argsPack or table.pack
 
 
 --------------------------------------------------------------------------
--- build_epoch(): This function builds the "epoch" function.  
---                The epoch function returns the number of seconds since
---                Jan 1, 1970, UTC
+-- This function builds the "epoch" function.  
+-- The epoch function returns the number of seconds since
+-- Jan 1, 1970, UTC
 
 function build_epoch()
    if (posix.gettimeofday) then
@@ -134,26 +135,25 @@ function build_epoch()
          epoch_type = "posix.gettimeofday() (1)"
          epoch = function()
             local t = posix.gettimeofday()
-            return (t.sec - T0) + t.usec*1.0e-6
+            return t.sec + t.usec*1.0e-6
          end
       else
          epoch_type = "posix.gettimeofday() (2)"
          epoch = function()
             local t1, t2 = posix.gettimeofday()
-            return (t1 - T0) + t2*1.0e-6
+            return t1 + t2*1.0e-6
          end
       end
    else
       epoch_type = "os.time"
       epoch = function()
-         return os.time() - T0
+         return os.time()
       end
    end
 end
 
 --------------------------------------------------------------------------
--- build_accept_functions(): Create the accept functions to allow or ignore
---                           TCL files.
+-- Create the accept functions to allow or ignore TCL files.
 
 function build_accept_functions()
    local allow_tcl = LMOD_ALLOW_TCL_MFILES:lower()
@@ -179,7 +179,7 @@ function build_accept_functions()
 end
 
 --------------------------------------------------------------------------
--- case_independent_cmp(): What it says.
+-- What it says.
 
 function case_independent_cmp(a,b)
    local a_lower = a:lower()
@@ -194,7 +194,7 @@ end
 
 
 --------------------------------------------------------------------------
--- expert(): Are we in expert mode?
+-- Are we in expert mode?
 local __expert = false
 function expert()
    if (__expert == false) then
@@ -204,7 +204,7 @@ function expert()
 end
 
 --------------------------------------------------------------------------
--- quiet(): Are we in quiet mode?
+-- Are we in quiet mode?
 local __quiet = false
 function quiet()
    if (__quiet == false) then
@@ -214,9 +214,9 @@ function quiet()
 end
 
 --------------------------------------------------------------------------
--- extractVersion(): Compare the full name of a modulefile with the
---                   shortname. Return nil if the shortname and full name
---                   are the same.
+-- Compare the full name of a modulefile with the
+-- shortname. Return nil if the shortname and full name
+-- are the same.
 
 function extractVersion(full, sn)
    if (not full or not sn) then
@@ -233,7 +233,7 @@ function extractVersion(full, sn)
    full = full:sub(1,j):lower() .. full:sub(j+1,-1)
    sn   = sn:lower()
 
-   local pat     = '^' .. escape(sn) .. '/?'
+   local pat     = '^' .. sn:escape() .. '/?'
    local version = full:gsub(pat,"")
    if (version == "") then
       version = nil
@@ -241,16 +241,18 @@ function extractVersion(full, sn)
    return version
 end
 
-
+-- This table must be include file names that are 8 characters or less.
+-- The MT:locationTblDir routine uses it.
 s_ignoreT = {
    ['.']         = true,
    ['..']        = true,
-   ['CVS']       = true,
+   ['.moduler']  = true,
+   ['.version']  = true,
+   ['.modulerc'] = true,
+   ['.DS_Stor']  = true,
    ['.DS_Store'] = true,
-   ['.git']      = true,
-   ['.svn']      = true,
-   ['.hg']       = true,
-   ['.bzr']      = true,
+
+   --@ignore_dirs@--
 }
 
 
@@ -262,16 +264,18 @@ end
 
 
 --------------------------------------------------------------------------
--- getMT(): Ask the environment for the _ModuleTable_ value.
---          It is uuencoded and broken into pieces so that the
---          quotes and parens won't confuse the shell's poor little
---          brain.  The number of pieces are stored in the global
---          env. variable _ModuleTable_Sz_.
+-- Ask the environment for the _ModuleTable_ value.
+-- It is uuencoded and broken into pieces so that the
+-- quotes and parens won't confuse the shell's poor little
+-- brain.  The number of pieces are stored in the global
+-- env. variable _ModuleTable_Sz_.
 
 function getMT()
    local a    = {}
    local mtSz = getenv("_ModuleTable_Sz_") or huge
    local s    = nil
+
+   --io.stderr:write("mtSz: ",tostring(mtSz),"\n")
 
    for i = 1, mtSz do
       local name = format("_ModuleTable%03d_",i)
@@ -373,11 +377,11 @@ function indexPath(old, oldA, new, newA)
 end
 
 ---------------------------------------------------------------------------
--- lastFileInPathA(path): This function finds the latest version of a package
---                        in the directory "path".  It uses the parseVersion()
---                        function to decide which version is the most recent.
---                        It is not a lexigraphical search but uses rules built
---                        into parseVersion().
+-- This function finds the latest version of a package
+-- in the directory "path".  It uses the parseVersion()
+-- function to decide which version is the most recent.
+-- It is not a lexigraphical search but uses rules built
+-- into parseVersion().
 
 
 function lastFileInPathA(pathA, n)
@@ -402,8 +406,8 @@ function lastFileInPathA(pathA, n)
 end
 
 --------------------------------------------------------------------------
--- length(): compute the length of a string and ignore any string
---           colorization.
+-- compute the length of a string and ignore any string
+-- colorization.
 
 function length(s)
    s = s:gsub("\027[^m]+m","")
@@ -411,8 +415,8 @@ function length(s)
 end
 
 --------------------------------------------------------------------------
--- masterTbl(): Manage the Master Hash Table.  The command line arguments
---              and the ModuleStack (when using Spider) are stored here.
+-- Manage the Master Hash Table.  The command line arguments
+-- and the ModuleStack (when using Spider) are stored here.
 
 s_masterTbl = {}
 function masterTbl()
@@ -420,19 +424,19 @@ function masterTbl()
 end
 
 --------------------------------------------------------------------------
--- path2pathA(): This function takes a path like variable and breaks
---               it up into an array.  Each path component is
---               standandized by path_regularize().  This function
---               removes leading and trailing spaces and duplicate '/'
---               etc.
+-- This function takes a path like variable and breaks
+-- it up into an array.  Each path component is
+-- standandized by path_regularize().  This function
+-- removes leading and trailing spaces and duplicate '/'
+-- etc.
 --
---               Typically the separator is a colon but it can be
---               anything.  Some env. vars (such as TEXINPUTS and
---               LUA_PATH) use "::" or ";;" to mean that the
---               specified values are prepended to the system ones.
---               To handle that, the path component is converted to
---               a single space.  This single space is later removed
---               when expanding.
+-- Typically the separator is a colon but it can be
+-- anything.  Some env. vars (such as TEXINPUTS and
+-- LUA_PATH) use "::" or ";;" to mean that the
+-- specified values are prepended to the system ones.
+-- To handle that, the path component is converted to
+-- a single space.  This single space is later removed
+-- when expanding.
 
 function path2pathA(path, sep)
    sep = sep or ":"
@@ -459,6 +463,16 @@ function path2pathA(path, sep)
    local pathA = {}
    for v  in path:split(sep) do
       pathA[#pathA + 1] = path_regularize(v)
+   end
+
+   local n = #pathA
+   local i = n
+   while (pathA[i] == "") do
+      i = i - 1
+   end
+   i = i + 2
+   for j = i, n do
+      pathA[j] = nil
    end
 
    return pathA
@@ -556,9 +570,9 @@ function readAdmin()
 end
 
 --------------------------------------------------------------------------
--- readRC(): read in the system and possible a user lmod configuration file.
---           The system one is read first.  These provide default value
---           The user one can override the default values.
+-- read in the system and possible a user lmod configuration file.
+-- The system one is read first.  These provide default value
+-- The user one can override the default values.
 
 local s_readRC     = false
 RCFileA = {
@@ -620,8 +634,8 @@ local function arg2str(v)
 end
 
 --------------------------------------------------------------------------
--- ShowCmdStr(): Build a string of what the command would be. Used by
---               MC_Show and MC_ComputeHash.
+-- Build a string of what the command would be. Used by
+-- MC_Show and MC_ComputeHash.
 
 defaultsT = {
    delim    = ":",
@@ -691,8 +705,8 @@ end
 
 
 --------------------------------------------------------------------------
--- UUIDString(epoch): Unique string that combines the current time/date
---                    with a uuid id string.
+-- Unique string that combines the current time/date
+-- with a uuid id string.
 
 function UUIDString(epoch)
    local ymd  = os.date("*t", epoch)
@@ -747,12 +761,12 @@ function moduleRCFile(current, path)
    
 end
 --------------------------------------------------------------------------
--- versionFile(): This routine is given the absolute path to a .version 
---                file.  It checks to make sure that it is a valid TCL
---                file.  It then uses the ModulesVersion.tcl script to 
---                return what the value of "ModulesVersion" is.
+-- This routine is given the absolute path to a .version 
+-- file.  It checks to make sure that it is a valid TCL
+-- file.  It then uses the ModulesVersion.tcl script to 
+-- return what the value of "ModulesVersion" is.
 
-function versionFile(v, sn, path)
+function versionFile(v, sn, path, ignoreErrors)
    dbg.start{"versionFile(v: ",v,", sn: ",sn,", path: ",path,")"}
    local f       = io.open(path,"r")
    if (not f)                        then
@@ -796,7 +810,7 @@ function versionFile(v, sn, path)
             a[#a + 1] = tonumber(s) or 0
          end
          
-         if (a[1] < 2000 or a[2] > 12) then
+         if (not ignoreErrors and (a[1] < 2000 or a[2] > 12 )) then
             LmodMessage("The .version file for \"",sn,
                         "\" has the date is written in the wrong format: \"",
                         modV.date,"\".  Please use YYYY/MM/DD.")
@@ -805,9 +819,11 @@ function versionFile(v, sn, path)
          local epoch   = os.time{year = a[1], month = a[2], day = a[3]} or 0
          local current = os.time() 
          if (current < epoch) then
-            LmodMessage("The default version for module \"",myModuleName(),
-                        "\" is changing on ", modV.date, " from ",modV.version,
-                        " to ", modV.newVersion,"\n")
+            if (not ignoreErrors) then
+               LmodMessage("The default version for module \"",myModuleName(),
+                           "\" is changing on ", modV.date, " from ",modV.version,
+                           " to ", modV.newVersion,"\n")
+            end
             version = modV.version
          else
             version = modV.newVersion
@@ -829,7 +845,7 @@ function setenv_lmod_version()
 
    local versionStr = Version.tag()
 
-   posix.setenv("LMOD_VERSION",versionStr, true)
+   setenv_posix("LMOD_VERSION",versionStr, true)
    local numA = {}
 
    for s in versionStr:split("%.") do
@@ -837,10 +853,92 @@ function setenv_lmod_version()
    end
 
    for i = 1, #nameA do
-      posix.setenv(nameA[i],numA[i] or "0", true)
+      setenv_posix(nameA[i],numA[i] or "0", true)
    end
 end
 
+
+--------------------------------------------------------------------------
+-- walk_directory_for_mf:
+--     Walk a single directory for modulefiles and defaults:
+--     Inputs:
+--         mpath:
+--         path:
+--         prefix:
+--     Outputs:
+--         dirA:
+--         mnameT:
+--     Returns:
+--         defaultFn:
+
+local defaultFnT = {
+   default       = 1,
+   ['.modulerc'] = 2,
+   ['.version']  = 3,
+}
+
+function walk_directory_for_mf(mpath, path, prefix, dirA, mnameT)
+   dbg.start{"walk_directory_for_mf(",mpath,", ",path,", ",prefix,", dirA, mnameT)"}
+   local attr = lfs.attributes(path)
+   if (not attr or type(attr) ~= "table" or attr.mode ~= "directory"
+       or not posix.access(path,"x")) then
+      dbg.print{"Path: ",path," does not exist\n"}
+      dbg.fini("walk_directory_for_mf")
+      return false
+   end
+
+   local accept_fn  = accept_fn
+   local defaultFn  = false
+   local defaultIdx = 1000000  -- default idx must be bigger than index for .version
+   -----------------------------------------------------------------------------
+   -- Read every relevant file in a directory.  Copy directory names into dirA.
+   -- Copy files into mnameT.
+   local ignoreT   = ignoreFileT()
+
+   for file in lfs.dir(path) do
+      local idx       = defaultFnT[file] or defaultIdx
+      if (idx < defaultIdx) then
+         defaultIdx = idx
+         defaultFn  = pathJoin(path,file)
+      else
+         local fileDflt  = file:sub(1,8)
+         local firstChar = file:sub(1,1)
+         local lastChar  = file:sub(-1,-1)
+         local firstTwo  = file:sub(1,2)
+         
+         if (not (ignoreT[file]    or lastChar == '~' or ignoreT[fileDflt] or
+                  firstChar == '#' or lastChar == '#' or firstTwo == '.#')) then
+            local f        = pathJoin(path,file)
+            attr           = lfs.attributes(f) or {}
+            local readable = posix.access(f,"r")
+            local full     = pathJoin(prefix, file):gsub("%.lua","")
+            
+            ------------------------------------------------------------
+            -- Since cache files are build by root but read by users
+            -- make sure that any user can read a file owned by root.
+
+            if (readable) then
+               local st    = posix.stat(f)
+               if (st.uid == 0 and not st.mode:find("......r..")) then
+                  readable = false
+               end
+            end
+            
+            if (not readable or not attr) then
+               -- do nothing for non-readable or non-existant files
+            elseif (attr.mode == 'file' and file ~= "default" and accept_fn(file) and
+                    full:sub(1,1) ~= '.') then
+               mnameT[full] = {fn = f, canonical=f:gsub("%.lua$",""), mpath = mpath}
+            elseif (attr.mode == "directory" and file:sub(1,1) ~= ".") then
+               dirA[#dirA + 1] = { fullName = f, mname = full}
+            end
+         end
+      end
+   end
+
+   dbg.fini("walk_directory_for_mf")
+   return defaultFn
+end
 
 --------------------------------------------------------------------------
 -- Deal with warnings

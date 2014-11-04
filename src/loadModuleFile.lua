@@ -1,4 +1,9 @@
 --------------------------------------------------------------------------
+-- Fixme
+-- @module loadModuleFile
+
+require("strict")
+--------------------------------------------------------------------------
 -- Lmod License
 --------------------------------------------------------------------------
 --
@@ -105,5 +110,6 @@ function loadModuleFile(t)
 
       LmodError("Unable to load module: ",n,"\n    ",t.file,": ", msg,"\n")
    end
+
    dbg.fini("loadModuleFile")
 end

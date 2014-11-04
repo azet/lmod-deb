@@ -1,3 +1,116 @@
+Lmod Version 5.8
+Features/Bug fixes:
+   a) Lmod support auto swapping instead of producing an error.
+   b) The init/bash.in and init/cshrc add a trailing colon to
+      MANPATH if it is empty
+   c) Fixes bug in ml tab completion for zsh.
+   d) setenv, prepend_path, etc now trim any leading or trailing
+      blanks around name: prepend_path(" MANPATH ","/opt/apps/...")
+      is now the same as prepend_path("MANPATH","/opt/apps/...")
+   e) The module command (and not ml) support combining of single
+      letter options.  "module -dw=60 avail" is the same as
+      "module -d -w=60 avail".
+   f) If a module collection file gets corrupted, Lmod now reports
+      that the collection file is corrupted and tells the user to
+      remove it.
+   g) Lmod now support "module swap <name>" which is exactly the
+      same as "module load <name>".  The module <name> is unloaded
+      and then reloaded.
+   h) Sites can configure for exporting the module shell function
+      in bash or not.
+
+
+Lmod Version 5.7.5:
+Features/Bug fixes:
+   a) "module use" and "ml use" now will work with tab completion
+      under bash. (It worked before for zsh).
+   b) New option, --spider_timeout sec is added.  Reason: When
+      Lmod can not load a module, it does a module spider to
+      see if the module exists but isn't loadable.  Now Lmod
+      doesn't do the spider when in LMOD_EXPERT mode.  It also
+      times out after 2 seconds.  If Lmod can't tell you quickly
+      if a module exists, why do it.
+   c) New configuration option --with-ignoreDirs.  By default
+      Lmod will ignore directories named .svn, .git, .hg and .bzr
+      in the Module directories. If you use CVS, RCS or SCCS to
+      source control your modulefiles, you will need configure
+      Lmod to know about those directories.
+   d) New avail hook added.  You can regroup the output of avail.
+      The avail hook gets a table of current directories that avail
+      will list.  Your routine can relabel them.  The input looks
+      like this:
+
+         t = {
+	    ['/path/to/IntelCmp/mfiles'] = "/path/to/IntelCmp/mfiles"
+	    ['/path/to/core/mfiles']     = "/path/to/core/mfiles"
+	 }
+	    
+      Your routine can relabel and change the labels
+
+         t = {
+	    ['/path/to/IntelCmp/mfiles'] = "Compiler Dependent"
+	    ['/path/to/core/mfiles']     = "Core Modules"
+	 }
+      You can also group them
+         t = {
+	    ['/path/to/IntelCmp/mfiles'] = "Modules"
+	    ['/path/to/core/mfiles']     = "Modules"
+	 }
+      In the last case intel modules and core modules will be 
+      grouped together.
+   e) Better handling of zsh tab completion files.  Lmod will
+      continue to install even when a site's zsh setup is
+      broken.
+   f) New option, --show_hidden, has been added. This is used
+      with avail to show "hidden" modulefiles.  That is module
+      files that start with a "."
+
+Lmod Version 5.7.4
+Features/Bug fixes:
+   a) Improved support for redirecting output to stdout.  Now show,
+      and help will write to stdout if LMOD_REDIRECT=yes.
+   b) module show unknown will set the return error code if "unknown"
+      doesn't exist.
+   c) "module --terse spider phdf5" will now produce a terse output.
+   d) a module file can do setenv("FOO","") and set the env.var to an
+      empty string.
+   e) Support for empty strings "" in paths are better supported.
+
+Lmod Version 5.7.2
+Features:
+   a) This version supports (an optional) sending the output of avail, list,
+      spider and keyword stdout instead of stderr.  This available as a
+      configure option, an environment variable (LMOD_REDIRECT=yes) or
+      module --redirect avail.
+
+      Note that if you use this option the internal pager is off.
+
+   
+Lmod Version 5.7
+Features:
+   a) Lmod is now more efficient when loading and unloading
+      modulefiles that modify MODULEPATH when there is no
+      cache file.
+   b) Lmod now reports that lua-term is active or not when
+      "module --config". This is there so that if Lmod is
+      built on a system that as a system lua-term on one and
+      is installed on a different system that doesn't.
+   c) module spider now reports module version in "parseVersion" 
+      order. (i.e 0.7.10 is newer than 0.7.2)
+   d) Internally Lmod sets LC_ALL=C so that a user's Locale does
+      not effect its behavior.
+
+Bug Fixes:
+   a) Lmod can now handle TCL modulefiles that use
+      "puts --nonewline ..."
+   b) TCL whatis with multiple arguments is now correctly handled.
+   c) Changed require("posix")  to local posix=require("posix")
+
+Lmod Version 5.6.3
+Bug Fixes:
+   a) Lmod now correctly handles prepending multiple directories to
+      MODULEPATH in one prepend_path.
+
 Lmod Version 5.6.2
 Bug Fixes:
    a) LMOD_EXPERT is now also turns on quiet mode.  It was removed

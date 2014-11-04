@@ -1,5 +1,35 @@
 #!@path_to_lua@/lua
 -- -*- lua -*-
+
+--------------------------------------------------------------------------
+-- This program takes shell scripts (either bash or csh) and converts 
+-- them to a modulefile (either Lua or TCL).  This program is a "new"
+-- but it is based on many design elements from sourceforge.net/projects/env2.
+-- The program "env2" also converts shells to modulefiles but it does 
+-- other conversions as well.  This program is more limited it just does
+-- conversions from scripts to tcl or lua modules.
+--
+--  Basic design:
+--     a) capture the output of the supplied script and use this program
+--        to generate a lua table of the Environment.
+--     b) create an output factory:  MF_Lmod or MF_TCL to generate the
+--        output modulefile style.
+--     c) Process the before environment with the after environment and
+--        generate the appropriate setenv's, prepend_path's and 
+--        append_path's to convert from the old env to the new.
+--
+--
+--  Tricks:
+--     The main problem with doing this is find the overlap in path-like
+--     variables.  Suppose you have:
+--          PATH="b:c:d"
+--     and the result after sourcing the shell script is:
+--          PATH="a:b:c:d:e"
+--     This program finds the overlap starting with "b" and then can
+--     report that "a" needs to be prepended and "e" needs to be appended.
+--
+-- @script sh_to_modulefile
+
 --------------------------------------------------------------------------
 -- Lmod License
 --------------------------------------------------------------------------
@@ -36,32 +66,6 @@
 
 --------------------------------------------------------------------------
 --  sh_to_modulefile :
---     This program takes shell scripts (either bash or csh) and converts 
---     them to a modulefile (either Lua or TCL).  This program is a "new"
---     but it is based on many design elements from sourceforge.net/projects/env2.
---     The program "env2" also converts shells to modulefiles but it does 
---     other conversions as well.  This program is more limited it just does
---     conversions from 
-
---------------------------------------------------------------------------
---  Basic design:
---     a) capture the output of the supplied script and use this program
---        to generate a lua table of the Environment.
---     b) create an output factory:  MF_Lmod or MF_TCL to generate the
---        output modulefile style.
---     c) Process the before environment with the after environment and
---        generate the appropriate setenv's, prepend_path's and 
---        append_path's to convert from the old env to the new.
-
---------------------------------------------------------------------------
---  Tricks:
---     The main problem with doing this is find the overlap in path-like
---     variables.  Suppose you have:
---          PATH="b:c:d"
---     and the result after sourcing the shell script is:
---          PATH="a:b:c:d:e"
---     This program finds the overlap starting with "b" and then can
---     report that "a" needs to be prepended and "e" needs to be appended.
 
 local program = arg[0]
 
@@ -87,19 +91,18 @@ require("capture")
 require("utils")
 MF_Base = require("MF_Base")
 
-local Version   = "0.0"
-local dbg       = require("Dbg"):dbg()
-local Optiks    = require("Optiks")
-local posix     = require("posix")
-local getenv    = posix.getenv
-local setenv    = posix.setenv
-local concatTbl = table.concat
-local s_master  = {}
-local load      = (_VERSION == "Lua 5.1") and loadstring or load
+local Version      = "0.0"
+local dbg          = require("Dbg"):dbg()
+local Optiks       = require("Optiks")
+local posix        = require("posix")
+local getenv_posix = posix.getenv
+local setenv_posix = posix.setenv
+local concatTbl    = table.concat
+local s_master     = {}
+local load         = (_VERSION == "Lua 5.1") and loadstring or load
+envT               = false
 
-envT            = false
-
-local keepT     = {
+local keepT = {
    ['HOME']            = 'keep',
    ['USER']            = 'keep',
    ['LD_LIBRARY_PATH'] = 'keep',
@@ -121,7 +124,7 @@ local ignoreA = {
    "SHLVL", "LC_ALL", "SSH_ASKPASS", "SSH_CLIENT", "SSH_CONNECTION", "SSH_TTY", "TERM",
    "USER", "EDITOR", "HISTFILE", "HISTSIZE", "MAILER", "PAGER", "REPLYTO", "VISUAL",
    "_", "ENV2", "OLDPWD", "PS1","PS2", "PRINTER", "TTY", "TZ", "GROUP", "HOSTTYPE",
-   "MACHTYPE", "OSTYPE","REMOTEHOST", "VENDOR","HOST",
+   "MACHTYPE", "OSTYPE","REMOTEHOST", "VENDOR","HOST","module",
 }
 
 function masterTbl()
@@ -129,7 +132,7 @@ function masterTbl()
 end
 
 function wrtEnv(fn)
-   local envT = posix.getenv()
+   local envT = getenv_posix()
    local s    = serializeTbl{name="envT", value = envT, indent = true}
    if (fn == "-") then
       io.stdout:write(s)
@@ -292,14 +295,14 @@ function indexPath(old, oldA, new, newA)
 end
 
 function cleanEnv()
-   local envT = getenv()
+   local envT = getenv_posix()
 
    for k, v in pairs(envT) do
       local keep = keepT[k]
       if (not keep) then
-         setenv(k, nil, true)
+         setenv_posix(k, nil, true)
       elseif (keep == 'neat') then
-         setenv(k, cleanPath(v), true)
+         setenv_posix(k, cleanPath(v), true)
       end
    end
 end
@@ -338,7 +341,7 @@ function main()
       cleanEnv()
    end
 
-   local oldEnvT = getenv()
+   local oldEnvT = getenv_posix()
    local cmdA    = false
 
    if(masterTbl.inStyle:lower() == "csh") then

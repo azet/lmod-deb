@@ -1,4 +1,10 @@
 --------------------------------------------------------------------------
+-- This is used to load all modulefiles when doing module collection
+-- restore.
+-- @classmod MC_MgrLoad
+
+require("strict")
+--------------------------------------------------------------------------
 -- Lmod License
 --------------------------------------------------------------------------
 --
@@ -32,11 +38,6 @@
 --
 --------------------------------------------------------------------------
 
---------------------------------------------------------------------------
--- Loading a module causes all the commands to act in the positive.
-
-
-require("strict")
 
 local MC_MgrLoad       = inheritsFrom(MasterControl)
 local M                = MC_MgrLoad
@@ -44,6 +45,7 @@ local dbg              = require("Dbg"):dbg()
 local format           = string.format
 local getenv           = os.getenv
 M.my_name              = "MC_MgrLoad"
+M.my_sType             = "load"
 M.my_tcl_mode          = "load"
 M.always_load          = MasterControl.fake_load
 M.always_unload        = MasterControl.fake_load

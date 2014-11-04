@@ -1,4 +1,34 @@
 --------------------------------------------------------------------------
+--  This class manages module names.  It turns out that a module
+--  name is more complicated only Lmod started supporting
+--  category/name/version style module names.  Lmod automatically
+--  figures out what the "name", "full name" and "version" are.
+--  The "MT:locationTbl()" knows the 3 components for modules that
+--  can be loaded.  On the other hand, "MT:exists()" knows for
+--  modules that are already loaded.
+--
+--  The problem is when a user gives a module name on the command
+--  line.  It can be the short name or the full name.  The trouble
+--  is that if the user gives "foo/bar" as a module name, it is
+--  quite possible that "foo" is the name and "bar" is the version
+--  or "foo/bar" is the short name.  The only way to know is to
+--  consult either choice above.
+--
+--  Yet another problem is that a module that is loaded may not be
+--  in the module may not be available to load because the
+--  MODULEPATH has changed.  Or if you are loading a module then it
+--  must be in the locationTbl.  So clients using this class must
+--  specify to the ctor that the name of the module is one that will
+--  be loaded or one that has been loaded.
+--
+--  Another consideration is that Lmod only allows for one "name"
+--  to be loaded at a time.
+--
+--  @classmod MName
+
+require("strict")
+
+--------------------------------------------------------------------------
 -- Lmod License
 --------------------------------------------------------------------------
 --
@@ -32,33 +62,6 @@
 --
 --------------------------------------------------------------------------
 
---------------------------------------------------------------------------
--- MName: This class manages module names.  It turns out that a module
---        name is more complicated only Lmod started supporting
---        category/name/version style module names.  Lmod automatically
---        figures out what the "name", "full name" and "version" are.
---        The "MT:locationTbl()" knows the 3 components for modules that
---        can be loaded.  On the other hand, "MT:exists()" knows for
---        modules that are already loaded.
-
---        The problem is when a user gives a module name on the command
---        line.  It can be the short name or the full name.  The trouble
---        is that if the user gives "foo/bar" as a module name, it is
---        quite possible that "foo" is the name and "bar" is the version
---        or "foo/bar" is the short name.  The only way to know is to
---        consult either choice above.
---
---        Yet another problem is that a module that is loaded may not be
---        in the module may not be available to load because the
---        MODULEPATH has changed.  Or if you are loading a module then it
---        must be in the locationTbl.  So clients using this class must
---        specify to the ctor that the name of the module is one that will
---        be loaded or one that has been loaded.
---
---        Another consideration is that Lmod only allows for one "name"
---        to be loaded at a time.
-
-require("strict")
 require("utils")
 require("inherits")
 
@@ -72,15 +75,15 @@ local posix       = require("posix")
 local sort        = table.sort
 MName             = M
 --------------------------------------------------------------------------
--- shorten(): This function allows for taking the name and remove one
---            level at a time.  Lmod rules require that if a module is
---            loaded or available, that the "short" name is either
---            the name given or one level removed.  So checking for
---            a "a/b/c/d" then the short name is either "a/b/c/d" or
---            "a/b/c".  It can't be "a/b" and the version be "c/d".
---            In other words, the "version" can only be one component,
---            not a directory/file.  This function can only be called
---            with level = 0 or 1.
+-- This function allows for taking the name and remove one
+-- level at a time.  Lmod rules require that if a module is
+-- loaded or available, that the "short" name is either
+-- the name given or one level removed.  So checking for
+-- a "a/b/c/d" then the short name is either "a/b/c/d" or
+-- "a/b/c".  It can't be "a/b" and the version be "c/d".
+-- In other words, the "version" can only be one component,
+-- not a directory/file.  This function can only be called
+-- with level = 0 or 1.
 
 local function shorten(name, level)
    if (level == 0) then
@@ -92,6 +95,9 @@ local function shorten(name, level)
    return name:sub(1,j)
 end
 
+--------------------------------------------------------------------------
+-- Do a prereq check to see name and/or version is loaded.
+-- @param self A MName object
 function M.prereq(self)
    local result  = false
    local mt      = MT:mt()
@@ -106,6 +112,9 @@ function M.prereq(self)
    return result
 end
 
+--------------------------------------------------------------------------
+-- Check to see if this object is loaded.
+-- @param self A MName object
 function M.isloaded(self)
    local mt        = MT:mt()
    local sn        = self:sn()
@@ -120,6 +129,9 @@ function M.isloaded(self)
    return (usrName == mt:fullName(sn)) and sn_active
 end
 
+--------------------------------------------------------------------------
+-- Check to see if the isPending module is pending.
+-- @param self A MName object
 function M.isPending(self)
    local mt         = MT:mt()
    local sn         = self:sn()
@@ -129,26 +141,34 @@ function M.isPending(self)
       return sn_pending
    end
    return (usrName == mt:fullName(sn)) and sn_pending
-   
 end
-
-
+--------------------------------------------------------------------------
+-- Returns the "action", It can be "match", "between" or "latest".
+-- @param self A MName object
 function M.action(self)
    return self._action
 end
 
---------------------------------------------------------------------------
--- MName:new(): This ctor takes "sType" to lookup in either the
---              locationTbl() or the exists() depending on whether it is
---              "load" for modules to be loaded (available) or it is
---              already loaded.  Knowing the short name it is possible to
---              figure out the version (if one exists).  If the module name
---              doesn't exist then the short name (sn) and version are set
---              to false.  The last argument is "action".  Normally this
---              argument is nil, which implies the value is "match".  Other
---              choices are "atleast", ...
-
 s_findT = false
+--------------------------------------------------------------------------
+-- This ctor takes "sType" to lookup in either the
+-- locationTbl() or the exists() depending on whether it is
+-- "load" for modules to be loaded (available) or it is
+-- already loaded.  Knowing the short name it is possible to
+-- figure out the version (if one exists).  If the module name
+-- doesn't exist then the short name (sn) and version are set
+-- to false.  The last argument is "action".  Normally this
+-- argument is nil, which implies the value is "match".  Other
+-- choices are "atleast", ...
+--
+-- @param self A MName object
+-- @param sType The type which can be "entryT", "load", "mt"
+-- @param name The name of the module.
+-- @param[opt] action The matching action if not nil it can be
+-- "atleast", "between" or "latest".
+-- @param[opt] is start version.
+-- @param[opt] ie end version.
+-- @return An MName object
 function M.new(self, sType, name, action, is, ie)
 
    if (not s_findT) then
@@ -186,9 +206,7 @@ function M.new(self, sType, name, action, is, ie)
    o._ie       = ie or tostring(1234567890)
    o._range    = {}
    o._range[1] = is
-   if (ie ) then
-      o._range[2] = ie
-   end
+   o._range[2] = ie -- This can be nil and that is O.K.
 
    o._actName = action
 
@@ -196,8 +214,10 @@ function M.new(self, sType, name, action, is, ie)
 end
 
 --------------------------------------------------------------------------
--- MName:buildA(...): Return an array of MName objects
-
+-- Return an array of MName objects
+-- @param self A MName object
+-- @param sType The type which can be "entryT", "load", "mt"
+-- @return An array of MName objects.
 function M.buildA(self,sType, ...)
    local arg = pack(...)
    local a = {}
@@ -213,6 +233,9 @@ function M.buildA(self,sType, ...)
    return a
 end
 
+--------------------------------------------------------------------------
+-- Convert an array of MName objects into a string.
+-- @param self A MName object
 function M.convert2stringA(self, ...)
    local arg = pack(...)
    local a = {}
@@ -236,6 +259,9 @@ function M.convert2stringA(self, ...)
    return a
 end
 
+--------------------------------------------------------------------------
+-- Based on *sType* finish constructing the MName object.
+-- @param self A MName object
 local function lazyEval(self)
    local sType = self._sType
    if (sType == "entryT") then
@@ -273,8 +299,8 @@ end
 
 
 --------------------------------------------------------------------------
--- MName:sn(): Return the short name
-
+-- Return the short name
+-- @param self A MName object
 function M.sn(self)
    if (not self._sn) then
       lazyEval(self)
@@ -284,17 +310,17 @@ function M.sn(self)
 end
 
 --------------------------------------------------------------------------
--- MName:usrName(): Return the user specified name.  It could be the
---                  short name or the full name.
-
+-- Return the user specified name.  It could be the
+-- short name or the full name.
+-- @param self A MName object
 function M.usrName(self)
    return self._name
 end
 
 --------------------------------------------------------------------------
--- MName:version(): Return the version for the module.  Note that the
---                  version is nil if not known.
-
+-- Return the version for the module.  Note that the
+-- version is nil if not known.
+-- @param self A MName object
 function M.version(self)
    dbg.start{"MName:version()"}
    dbg.print{"sType:   ", self._sType,"\n"}
@@ -318,10 +344,9 @@ function M.version(self)
 end
 
 --------------------------------------------------------------------------
--- followDefault(): This local function is used to find a default file
---                  that maybe in symbolic link chain. This returns
---                  the absolute path.
-
+-- This is used to find a default file that maybe in symbolic link chain. 
+-- @param path a file path.
+-- @return This returns the absolute path.
 local function followDefault(path)
    if (path == nil) then return nil end
    dbg.start{"followDefault(path=\"",path,"\")"}
@@ -360,11 +385,24 @@ local function followDefault(path)
    return result
 end
 
+--------------------------------------------------------------------------
+-- Build the initial table for reporting a module file location.
+-- @return the initial table.
+local function module_locationT()
+   return { fn = nil, modFullName = nil, modName = nil, default = 0}
+end
+
+--------------------------------------------------------------------------
+-- Look for the module name via an exact match.
+-- @param self A MName object
+-- @param pathA An array of paths to search
+-- @return True or false
+-- @return A table describing the module if found.
 function M.find_exact_match(self, pathA)
    dbg.start{"MName:find_exact_match(pathA, t)"}
    local usrName    = self:usrName()
    dbg.print{"UserName: ", usrName , "\n"}
-   local t          = { fn = nil, modFullName = nil, modName = nil, default = 0}
+   local t          = module_locationT()
    local found      = false
    local result     = nil
    local fullName   = ""
@@ -420,10 +458,10 @@ end
 
 
 --------------------------------------------------------------------------
--- followDotVersion(): This local function takes the file pointed to by the 
---                     .version file and looks to see if that file exists
---                     in the current mpath directory.  Note that this file
---                     might have a .lua extension.
+-- This local function takes the file pointed to by the 
+-- .version file and looks to see if that file exists
+-- in the current mpath directory.  Note that this file
+-- might have a .lua extension.
 
 local function followDotVersion(mpath, sn, version)
    local accept_fn  = accept_fn
@@ -450,12 +488,18 @@ end
 
 searchDefaultT = { "/default", "/.modulerc", "/.version" }
 
+--------------------------------------------------------------------------
+-- Look for the module name via a marked default.
+-- @param self A MName object
+-- @param pathA An array of paths to search
+-- @return True or false
+-- @return A table describing the module if found.
 function M.find_marked_default(self, pathA)
    dbg.start{"MName:find_marked_default(pathA, t)"}
    local usrName   = self:usrName()
    local sn        = self:sn()
    local accept_fn = accept_fn
-   local t         = { fn = nil, modFullName = nil, modName = nil, default = 0}
+   local t         = module_locationT()
    local found     = false
    local result    = nil
    local fullName  = ""
@@ -527,10 +571,16 @@ function M.find_marked_default(self, pathA)
    return found, t
 end
 
+--------------------------------------------------------------------------
+-- Look for the module name via the "latest" version.
+-- @param self A MName object
+-- @param pathA An array of paths to search
+-- @return True or false
+-- @return A table describing the module if found.
 function M.find_latest(self, pathA)
    dbg.start{"MName:find_latest(pathA, t)"}
    local found     = false
-   local t         = { fn = nil, modFullName = nil, modName = nil, default = 0}
+   local t         = module_locationT()
    local usrName   = self:usrName()
    local sn        = self:sn()
    dbg.print{"usrName: ", usrName, "\n"}
@@ -565,10 +615,17 @@ function M.find_latest(self, pathA)
    return found, t
 end
 
+--------------------------------------------------------------------------
+-- Look for the module name where the version is "between" and is a marked
+-- default.
+-- @param self A MName object
+-- @param pathA An array of paths to search
+-- @return True or false
+-- @return A table describing the module if found.
 function M.find_marked_default_between(self, pathA)
    dbg.start{"MName:find_marked_default_between(pathA, t)"}
 
-   local t     = { fn = nil, modFullName = nil, modName = nil, default = 0}
+   local t     = module_locationT()
    local found = false
 
    found, t = self:find_marked_default(pathA, t)
@@ -587,11 +644,17 @@ function M.find_marked_default_between(self, pathA)
    return found, t
 end
 
+--------------------------------------------------------------------------
+-- Look for the module name where the version is "between".
+-- @param self A MName object
+-- @param pathA An array of paths to search
+-- @return True or false
+-- @return A table describing the module if found.
 function M.find_between(self, pathA)
    dbg.start{"MName:find_between(pathA, t)"}
    dbg.print{"UserName: ", self:usrName(), "\n"}
 
-   local t     = { fn = nil, modFullName = nil, modName = nil, default = 0}
+   local t     = module_locationT()
    local found = false
    local a     = allVersions(pathA)
 
@@ -630,14 +693,21 @@ function M.find_between(self, pathA)
    return found, t
 end
 
+--------------------------------------------------------------------------
+-- Return the string of the user name of the module.
+-- @param self A MName object
 function M.show(self)
    return '"' .. self:usrName() .. '"'
 end
 
 
+--------------------------------------------------------------------------
+-- Find the module based on the "steps" each class has registered.
+-- @param self A MName object
+-- @return A table describing the module.
 function M.find(self)
    dbg.start{"MName:find(",self:usrName(),")"}
-   local t        = { fn = nil, modFullName = nil, modName = nil, default = 0}
+   local t        = module_locationT()
    local mt       = MT:mt()
    local fullName = ""
    local modName  = ""

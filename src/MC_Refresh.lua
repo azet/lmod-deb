@@ -1,4 +1,14 @@
 --------------------------------------------------------------------------
+-- Setup for refresh mode. Refresh just reloads every currently loaded
+-- module so that shell functions and aliases will be defined in a
+-- sub-shell.  So almost all Lmod functions do nothing except for the ones
+-- that name the module and the set_alias and set_shell_function functions.
+--
+-- @classmod MC_Refresh
+
+require("strict")
+
+--------------------------------------------------------------------------
 -- Lmod License
 --------------------------------------------------------------------------
 --
@@ -32,18 +42,11 @@
 --
 --------------------------------------------------------------------------
 
---------------------------------------------------------------------------
--- Setup for refresh mode. Refresh just reloads every currently loaded
--- module so that shell functions and aliases will be defined in a
--- sub-shell.  So almost all Lmod functions do nothing except for the ones
--- that name the module and the set_alias and set_shell_function functions.
-
-
-require("strict")
 
 local MC_Refresh       = inheritsFrom(MasterControl)
 local M                = MC_Refresh
 M.my_name              = "MC_Refresh"
+M.my_sType             = "load"
 M.my_tcl_mode          = "load"
 M.always_load          = MasterControl.quiet
 M.always_unload        = MasterControl.quiet

@@ -383,12 +383,18 @@ proc module-info {what {more {}}} {
     }
 }
 
-proc module-whatis { msg } {
+proc module-whatis { args } {
+    set msg ""
+    foreach item $args {
+       append msg $item
+       append msg " "
+    }
+
     regsub -all {[\n]} $msg  " " msg2
     puts stdout "whatis(\[\[$msg2\]\])"
 }
 
-proc setenv { var val } {
+proc setenv { var val args } {
     global env
     set env($var) $val
     if {[string match $var "-respect"] || [string match $var "-r"] || [string match $var "--respect"]} {
@@ -539,9 +545,9 @@ proc use { args } {
 	    set path_cmd "prepend_path"
 	} else {
             #puts stderr "path: $path"
-            if {[file isdirectory $path]} {
+            #if {[file isdirectory $path]} {
                 eval cmdargs $path_cmd MODULEPATH $path
-            }
+            #}
 	}
     }
 }
@@ -556,24 +562,55 @@ proc setPutMode { value } {
     set putMode $value
 }
 
-proc myPuts { stream { msg "" } } {
+proc myPuts args {
     global putMode
-
-    if { $msg eq "" } {
-	set msg    $stream
-	set stream "stdout"
+    foreach {a b c} $args break
+    set nonewline 0
+    switch [llength $args] {
+        1 {
+            set channel stdout
+            set text $a
+        }
+        2 {
+            if {[string equal $a -nonewline]} {
+                set nonewline 1
+                set channel stdout
+            } else {
+                set channel $a
+            }
+            set text $b
+        }
+        3 {
+            if {[string equal $a -nonewline]} {
+                set nonewline 1
+                set channel $b
+            } elseif {[string equal $b -nonewline]} {
+                set nonewline 1
+                set channel $a
+            } else {
+                error {puts ?-nonewline? ?channel? text}
+            }
+            set text $c
+        }
+        default {
+            error {puts ?-nonewline? ?channel? text}
+        }
     }
     if {$putMode != "inHelp"} {
-        if { ($stream == "stdout") || ($stream == "stderr") } {
-            puts stdout "LmodMessage(\"$msg\")"
-        } else {
-            puts $stream "$msg"
+        if { ($channel == "stdout") || ($channel == "stderr") } {
+            set channel "stdout"
+            set text "LmodMessage(\[\[$text\]\])"
         }
     } else {
-        puts stdout "$msg"
+        set channel  "stdout"
     }
+    if { $nonewline == 1 } {
+        puts -nonewline $channel $text
+    } else {
+        puts $channel $text
+    }
+        
 }
-
 
 proc uname {what} {
     global unameCache tcl_platform
@@ -696,7 +733,7 @@ proc execute-modulefile {modfile } {
             set end   "\]\])"
             setPutMode "inHelp"
             puts stdout $start
-            ModulesHelp
+	    catch { ModulesHelp } errMsg
             puts stdout $end
             setPutMode "normal"
         }

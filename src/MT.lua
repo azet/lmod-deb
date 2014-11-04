@@ -1,4 +1,13 @@
 --------------------------------------------------------------------------
+-- This class controls the ModuleTable.  The ModuleTable is how Lmod
+-- communicates what modules are loaded or inactive and so on between
+-- module commands.
+--
+-- @classmod MT
+
+require("strict")
+
+--------------------------------------------------------------------------
 -- Lmod License
 --------------------------------------------------------------------------
 --
@@ -32,12 +41,6 @@
 --
 --------------------------------------------------------------------------
 
---------------------------------------------------------------------------
--- MT: This class controls the ModuleTable.  The ModuleTable is how Lmod
---     communicates what modules are loaded or inactive and so on between
---     module commands.
-
-require("strict")
 _ModuleTable_      = ""
 local DfltModPath  = DfltModPath
 local ModulePath   = ModulePath
@@ -77,58 +80,29 @@ s_mt = false
 s_mtA = {}
 
 --------------------------------------------------------------------------
--- locationTblDir(): This local function walks a single directory to find
---                   all the modulefiles in that directory.  This function
---                   is used when moduleT is not available.  The naming
---                   rule is implemented here:
---                     (1) If a file is a member of a path in MODULEPATH
---                         then it is a meta-module.
---                     (2) If a file is a sub-directory of MODULEPATH, then
---                         and there are no subdirectories (excluding
---                         '.' and '..' of course), then these files are
---                         version files and the names are the directory
---                         (or directories) between the path in MODULEPATH
---                         and here.
---                     (3) If a file is in a directory with subdirectories
---                         then that file is a meta-module.
+-- This local function walks a single directory to find
+-- all the modulefiles in that directory.  This function
+-- is used when moduleT is not available.  The naming
+-- rule is implemented here:
+--   (1) If a file is a member of a path in MODULEPATH
+--       then it is a meta-module.
+--   (2) If a file is a sub-directory of MODULEPATH, then
+--       and there are no subdirectories (excluding
+--       '.' and '..' of course), then these files are
+--       version files and the names are the directory
+--       (or directories) between the path in MODULEPATH
+--       and here.
+--   (3) If a file is in a directory with subdirectories
+--       then that file is a meta-module.
 --
---                   Meta-modules are modulefiles that are not versioned.
---                   They typically load other modules but not always.
+-- Meta-modules are modulefiles that are not versioned.
+-- They typically load other modules but not always.
 
-local function locationTblDir(mpath, path, prefix, locationT, availT)
-   --dbg.start{"locationTblDir(",mpath,",",path,",",prefix,")"}
-   local attr = lfs.attributes(path)
-   if (not attr or type(attr) ~= "table" or attr.mode ~= "directory"
-       or not posix.access(path,"x")) then
-      return
-   end
+local function buildAvailT(mpath, path, prefix, availT)
 
-   local mnameT = {}
-   local dirA   = {}
-
-   -----------------------------------------------------------------------------
-   -- Read every relevant file in a directory.  Copy directory names into dirA.
-   -- Copy files into mnameT.
-   local ignoreT = ignoreFileT()
-
-   for file in lfs.dir(path) do
-      if (not ignoreT[file] and file:sub(-1,-1) ~= "~" and file:sub(1,8) ~= ".version") then
-         local f = pathJoin(path,file)
-         attr    = lfs.attributes(f) or {}
-         local readable = posix.access(f,"r")
-         if (not readable or not attr) then
-            -- do nothing for non-readable or non-existant files
-         elseif (attr.mode == 'file' and file ~= "default") then
-            local mname = pathJoin(prefix, file):gsub("%.lua$","")
-            mnameT[mname] = {file=f:gsub("%.lua$",""), mpath = mpath}
-         elseif (attr.mode == "directory" and file:sub(1,1) ~= ".") then
-            dirA[#dirA + 1] = { fullName = f, mname = pathJoin(prefix, file) }
-         end
-      end
-   end
-
-
-   --dbg.print{"#dirA: ",#dirA,"\n"}
+   local mnameT     = {}
+   local dirA       = {}
+   local defaultFn  = walk_directory_for_mf(mpath, path, prefix, dirA, mnameT)
 
    if (#dirA > 0 or prefix == '') then
       --------------------------------------------------------------------------
@@ -136,17 +110,18 @@ local function locationTblDir(mpath, path, prefix, locationT, availT)
       -- any files are meta-modules.  Also if there are files when there are
       -- directories then these files are also meta-modules.
 
-      -- Copy any meta-modules into the array stored at locationT[k].
+      -- Copy any meta-modules into the array availT[k][0].
       for k,v in pairs(mnameT) do
-         local a      = locationT[k] or {}
-         a[#a+1]      = v
-         locationT[k] = a
          availT[k]    = {}
+         availT[k][0] = v
+         availT[k].total  = 0
+         availT[k].hidden = 0
       end
+      
 
-      -- For any directories found recursively call locationDir to process.
+      -- For any directories found recursively call buildAvailT to process.
       for i = 1, #dirA do
-         locationTblDir(mpath, dirA[i].fullName,  dirA[i].mname, locationT, availT)
+         buildAvailT(mpath, dirA[i].fullName,  dirA[i].mname, availT)
       end
    elseif (next(mnameT) ~= nil) then
       ------------------------------------------------------------------------
@@ -154,9 +129,6 @@ local function locationTblDir(mpath, path, prefix, locationT, availT)
       -- directory. So any files found here are versions for the module.
       -- The "name" of the module is the "prefix".
 
-      local a           = locationT[prefix] or {}
-      a[#a+1]           = {file = path, mpath = mpath}
-      locationT[prefix] = a
       availT[prefix]    = {}
       local vA          = {}
 
@@ -165,102 +137,121 @@ local function locationTblDir(mpath, path, prefix, locationT, availT)
       for full, v in pairs(mnameT) do
          local version = full:gsub(".*/","")
          local parseV  = parseVersion(version)
-         vA[#vA+1]     = {parseV, version, v.file}
+         vA[#vA+1]     = {parseV, version, v.fn}
       end
       sort(vA, function(a,b) return a[1] < b[1] end )
       local a = {}
-      for i = 1, #vA do
-         a[i] = {version = vA[i][2], file = vA[i][3]}
+      local total  = #vA
+      local hidden = 0
+      for i = 1, total do
+         local version = vA[i][2]
+         a[i] = {version = version, fn = vA[i][3], parseV=vA[i][1]}
+         if (version:sub(1,1) == ".") then hidden = hidden + 1 end
       end
-      --dbg.print{"Adding ",prefix," to availT, #a: ",#a,"\n"}
+      a.total  = total
+      a.hidden = hidden
       availT[prefix] = a
+
+      dbg.print{"availT[",prefix,"].total: ",a.total,"\n"}
+      if (defaultFn) then
+         local d, v = splitFileName(defaultFn)
+         v          = "/" .. v
+         if (v == "/default") then
+            defaultFn = abspath_localdir(defaultFn)
+         else
+            v         = versionFile(v, prefix, defaultFn, true)
+            --d         = abspath(d)
+            local f   = pathJoin(d,v)
+            defaultFn = abspath_localdir(f)
+            if (defaultFn == nil) then
+               defaultFn = abspath_localdir(pathJoin(d,v .. ".lua"))
+            end
+         end
+         local num = #vA
+         availT[prefix].default    = {fn = defaultFn, kind="marked", num = num}
+      else
+         local d = pathJoin(mpath, prefix)
+         defaultFn = pathJoin(d, a[#a].version)
+      end
    end
-   --dbg.fini("locationTblDir")
 end
 
+
+
 --------------------------------------------------------------------------
--- buildLocWmoduleT(): This local function walks a single directory in
---                     moduleT.  This routine fills in availT[mpath} and
---                     the local copy of the locationT "lT".
-
-
-local function buildLocWmoduleT(mpath, moduleT, mpathT, lT, availT)
-   dbg.start{"MT:buildLocWmoduleT(mpath, moduleT, mpathA, lT, availT)"}
+-- This local function walks a single directory in
+-- moduleT.  This routine fills in availT[mpath} and
+-- the local copy of the locationT "lT".
+local function buildLocWmoduleT(mpath, moduleT, mpathT, availT)
+   dbg.start{"MT:buildLocWmoduleT(mpath, moduleT, mpathA, availT)"}
    dbg.print{"mpath: ", mpath,"\n"}
-
+   local Pairs       = dbg.active() and pairsByKeys or pairs
    local availEntryT = availT[mpath]
 
-   for f, vv in pairs(moduleT) do
+   for f, vv in Pairs(moduleT) do
 
       --------------------------------------------------------------------
       --
 
       local defaultModule = false
       local sn            = vv.name
-      local a             = lT[sn] or {}
-      if (a[mpath] == nil) then
-         a[mpath] = { file = pathJoin(mpath,sn), mpath = mpath, fullFn = vv.path}
-      end
-      lT[sn]   = a
-
-      a = availEntryT[sn] or {}
+      local a             = availEntryT[sn] or {}
 
       local version   = extractVersion(vv.full, sn)
 
       if (version) then
          local parseV = parseVersion(version)
-         a[parseV]    = { version = version, file = f, parseV = parseV,
+         a[parseV]    = { version = version, fn = f, parseV = parseV,
                           markedDefault = vv.markedDefault}
       else
-         a[0]         = { version = 0, file = f, markedDefault = false,
+         a[0]         = { version = 0, fn = f, markedDefault = false,
                           parseV = "z"}
       end
       availEntryT[sn] = a
 
       for k, v in pairs(vv.children) do
          if (mpathT[k]) then
-            buildLocWmoduleT(k, vv.children[k], mpathT, lT, availT)
+            buildLocWmoduleT(k, vv.children[k], mpathT, availT)
          end
       end
    end
    dbg.fini("MT:buildLocWmoduleT")
 end
 
-
 --------------------------------------------------------------------------
--- buildAllLocWmoduleT(): This routine walks moduleT for all directories
---                        stored there. Once all the directories have been
---                        traversed by [[buildLocWmoduleT]], [[availT]] is
---                        rebuilt to have the entries in parseVersion order
---                        and locationT is sorted as well.
+-- This routine walks moduleT for all directories
+-- stored there. Once all the directories have been
+-- traversed by [[buildLocWmoduleT]], [[availT]] is
+-- rebuilt to have the entries in parseVersion order
+-- and locationT is sorted as well.
 --
---   availT[mpath][sn] = {
---                         {version=..., file=..., parseV=...,
+--    availT[mpath][sn] = {
+--                          {version=..., fn=..., parseV=...,
 --                           markedDefault=T/F},
---                       }
+--                        }
 --
---  When sn is a meta module then
---   availT[mpath][sn][0] = {version=..., file=..., parseV=...,
+-- When sn is a meta module then
+--
+--    availT[mpath][sn][0] = {version=..., fn=..., parseV=...,
 --                           markedDefault=T/F},
 --
---   locationT[sn] = {
---                    default = {fn=, num=,
---                               type=[last,marked] }
---                    {mpath=..., file=..., fullFn=...},
---                    {mpath=..., file=..., fullFn=...},
---                   }
-
-local function buildAllLocWmoduleT(moduleT, mpathA, locationT, availT)
-   --dbg.start{"MT:buildAllLocWmoduleT(moduleT, mpathA, locationT, availT)"}
-
+--    locationT[sn] = {
+--                     default = {fn=, num=,
+--                                kind=[last,marked] }
+--                     {mpath=..., file=..., fullFn=...},
+--                     {mpath=..., file=..., fullFn=...},
+--                    }
+local function buildAllLocWmoduleT(moduleT, mpathA, availT, adding, pathEntry)
+   dbg.start{"MT:buildAllLocWmoduleT(moduleT, mpathA, availT, adding: ",
+             adding,", pathEntry: ",pathEntry,")"}
 
    -----------------------------------------------------------------------
    -- Initialize [[mpathT]] and [[availT]] for directories in [[mpathA]]
    -- that exist.
 
 
+   local Pairs  = dbg.active() and pairsByKeys or pairs
    local mpathT = {}
-   local lT     = {}  -- temporary locationT
    for i = 1,#mpathA do
       local mpath = mpathA[i]
       local attr  = lfs.attributes(mpath)
@@ -272,156 +263,44 @@ local function buildAllLocWmoduleT(moduleT, mpathA, locationT, availT)
 
    -----------------------------------------------------------------------
    -- For each directory in [[mpathT]] process that table in [[moduleT]]
-   for mpath in pairs(mpathT) do
+   for mpath in Pairs(mpathT) do
       local mpmT = moduleT[mpath]
       if (mpmT) then
-         buildLocWmoduleT(mpath, mpmT, mpathT, lT, availT)
+         buildLocWmoduleT(mpath, mpmT, mpathT, availT)
       end
    end
 
    -----------------------------------------------------------------------
    -- Rebuild [[availT]] to have the versions in parseVersion order.
 
-   for mpath, vvv in pairs(availT) do
-      for sn, vv in pairs(vvv) do
+   for mpath, vvv in Pairs(availT) do
+      for sn, vv in Pairs(vvv) do
          local aa = {}
+         local defaultT = false
          for parseV, v in pairsByKeys(vv) do
+            
             if (parseV == 0) then
                aa[0] = v
             else
                aa[#aa + 1] = v
             end
+            if (v.markedDefault) then
+               defaultT = {kind="marked", fn = v.fn}
+            end
          end
          availT[mpath][sn] = aa
-      end
-   end
-
-   -----------------------------------------------------------------------
-   -- Sort [[locationT]] as well.
-   for sn, vv in pairs(lT) do
-      local a = {}
-      for mpath, v in pairs(vv) do
-         a[#a + 1] = {mpathT[mpath], v}
-      end
-      sort(a, function (x,y) return x[1] < y[1] end)
-
-      local b = {}
-      for i = 1, #a do
-         b[i] = a[i][2]
-      end
-      locationT[sn] = b
-   end
-   lT = nil  -- Done with lT
-
-   -- Use both locationT and availT to find the default modulefile
-   -- and store it in locationT.
-
-   for sn, pathA in pairs(locationT) do
-      local found = false
-      for ii = 1, #pathA do
-         local mpath    = pathA[ii].mpath
-         local versionA = availT[mpath][sn]
-         for i = 1, #versionA do
-            local v = versionA[i]
-            if (v.markedDefault) then
-               local num  = math.max(#versionA, #pathA)
-               local d, f = splitFileName(v.file)
-               local fn   = pathJoin(abspath(d), f)
-               locationT[sn].default = {fn = fn, kind="marked", num = num}
-               --locationT[sn].default = {fn = v.file, kind="marked", num = num}
-               found = true
-               break
-            end
+         if (defaultT) then
+            availT[mpath][sn].default = defaultT
          end
-         if (found) then break end
-      end
-      if (not found) then
-         local lastValue = false
-         local lastKey   = ''
-         local sum       = 0
-         for i = 1, #pathA do
-            local versionA = availT[pathA[i].mpath][sn]
-            local num      = #versionA
-            local pv       = versionA[num].parseV
-            if (pv > lastKey) then
-               lastKey   = pv
-               lastValue = versionA[num]
-            end
-            sum = sum + num
-         end
-         local d, f            = splitFileName(lastValue.file)
-         local fn              = pathJoin(abspath(d), f)
-         --local fn              = lastValue.file
-         locationT[sn].default = {fn = fn, kind = "last", num = sum}
       end
    end
 
-   --dbg.fini("MT:buildAllLocWmoduleT")
+   dbg.fini("MT:buildAllLocWmoduleT")
 end
 
 
 --------------------------------------------------------------------------
--- build_locationTbl(): Build [[locationT]] either by using [[moduleT]] if
---                      it exists or use [[locationTblDir]] to walk the
---                      directories.
-
-local function build_locationTbl(mpathA)
-
-   dbg.start{"MT:build_locationTbl(mpathA)"}
-   local locationT = {}
-   local availT    = {}
-   local Pairs     = dbg.active() and pairsByKeys or pairs
-
-   if (varTbl[ModulePath] == nil or varTbl[ModulePath]:expand() == "") then
-      dbg.print{"MODULEPATH is undefined\n"}
-      dbg.fini("MT:build_locationTbl")
-      return {}, {}
-   end
-
-   local fast      = true
-   local cache     = _G.Cache:cache()
-   local moduleT   = cache:build(fast)
-
-   dbg.print{"moduleT: ", not (not moduleT),"\n"}
-
-   if (moduleT) then
-      buildAllLocWmoduleT(moduleT, mpathA, locationT, availT)
-   else
-      for i = 1, #mpathA do
-         local mpath = mpathA[i]
-         availT[mpath] = {}
-         locationTblDir(mpath, mpath, "", locationT, availT[mpath])
-      end
-   end
-
-   if (dbg.active()) then
-      dbg.print{"availT: \n"}
-      for mpath, vv in Pairs(availT) do
-         dbg.print{"  mpath: ", mpath,":\n"}
-
-         for sn , v in pairsByKeys(vv) do
-            dbg.print{"    ",sn,":"}
-            for i = 1, #v do
-               io.stderr:write(" ",v[i].version,",")
-            end
-            io.stderr:write("\n")
-         end
-      end
-      dbg.print{"locationT: \n"}
-      for sn, vv in Pairs(locationT) do
-         dbg.print{"  sn: ", sn,":\n"}
-         for i = 1, #vv do
-            dbg.print{"    ",vv[i].file,"\n"}
-         end
-      end
-   end
-   dbg.fini("MT:build_locationTbl")
-   return locationT, availT
-end
-
---------------------------------------------------------------------------
--- columnList(): Generate a columeTable with a title.
-
+-- Generate a columeTable with a title.
 local function columnList(stream, msg, a)
    local t = {}
    sort(a)
@@ -439,9 +318,8 @@ local function mt_version()
 end
 
 ------------------------------------------------------------------------
--- MT:new(): local ctor for MT.  It uses [[s]] to be the initial value.
-
-local function new(self, s, restore)
+-- local ctor for MT.  It uses [[s]] to be the initial value.
+local function new(self, s, restoreFn)
    dbg.start{"MT:new()"}
    local o            = {}
 
@@ -478,9 +356,27 @@ local function new(self, s, restore)
       o:buildBaseMpathA(currentMPATH)
       dbg.print{"Initializing ", DfltModPath, ":", currentMPATH, "\n"}
    else
-      dbg.print{"s: ",s,"\n"}
-      assert(load(s))()
+      systemG._ModuleTable_ = false
+      local func, msg = load(s)
+      local status
+      if (func) then
+         status, msg = pcall(func)
+      else
+         status = false
+      end
+
       local _ModuleTable_ = systemG._ModuleTable_
+
+      if (not status or type(_ModuleTable_) ~= "table" ) then
+         if (restoreFn) then
+            LmodError("The module collection file is corrupt. Please remove: ",
+                      restoreFn,"\n")
+         else
+            LmodError("The module table stored in the environment is corrupt.\n",
+                      "please execute the command \" clearMT\" and reload your modules.\n")
+         end
+      end
+
 
       if (_ModuleTable_.version == 1) then
          s_loadOrder = o:convertMT(_ModuleTable_)
@@ -515,7 +411,7 @@ local function new(self, s, restore)
          dbg.print{"currentMPATH:        ",currentMPATH,"\n"}
          dbg.print{"_MPATH:              ",o._MPATH,"\n"}
          dbg.print{"baseMPATH:           ",o.systemBaseMPATH,"\n"}
-         if (o._MPATH ~= currentMPATH and not restore) then
+         if (o._MPATH ~= currentMPATH and not restoreFn) then
             o:resolveMpathChanges(currentMPATH, baseMPATH)
          end
       end
@@ -529,8 +425,174 @@ local function new(self, s, restore)
 end
 
 --------------------------------------------------------------------------
--- MT:convertMT() - Translate a version 1 MT into current version.
+-- Build *locationT* either by using *moduleT* if it exists or use
+-- *buildAvailT* to walk the directories.
+-- @param self An MT object
+-- @param mpathA
+-- @param adding
+-- @param pathEntry
+-- @return The locationT table.
+-- @return The availT table.
+function M._build_locationTbl(self, mpathA, adding, pathEntry)
 
+   dbg.start{"MT:_build_locationTbl(mpathA, adding: ", adding,
+             ", pathEntry: \"",pathEntry,"\")"}
+
+   if (varTbl[ModulePath] == nil or varTbl[ModulePath]:expand() == "") then
+      dbg.print{"MODULEPATH is undefined\n"}
+      dbg.fini("MT:_build_locationTbl")
+      return {}, {}
+   end
+
+   local hidden       = not masterTbl().show_hidden
+   local Pairs        = dbg.active() and pairsByKeys or pairs
+   local locationT    = {}
+   local availT       = {}
+   local mustWalkDirs = true
+   if (type (self._availT) == "table") then
+      if (adding == false and pathEntry) then
+         availT = self._availT
+         if (availT[pathEntry]) then
+            mustWalkDirs      = false
+            availT[pathEntry] = nil
+            dbg.print{"Fast removal of directory: ",pathEntry,"\n"}
+         end
+      end
+   end
+
+   if (mustWalkDirs) then
+      local fast      = true
+      local cache     = _G.Cache:cache()
+      local moduleT   = cache:build(fast)
+      
+      dbg.print{"moduleT: ", not (not moduleT),"\n"}
+
+      if (moduleT) then
+         buildAllLocWmoduleT(moduleT, mpathA, availT, adding, pathEntry)
+      else
+         availT = self._availT or {}
+         for i = 1, #mpathA do
+            local mpath = mpathA[i]
+            if ( availT[mpath] == nil) then
+               availT[mpath] = {}
+               buildAvailT(mpath, mpath, "", availT[mpath])
+            end
+         end
+      end
+   end
+
+   --------------------------------------------------------------------------
+   -- Use availT to build locationT
+
+   for i = 1, #mpathA do
+      local defaultEntry = false
+      local defaultFn    = false
+      local defaultKind  = false
+      local parseV       = false
+      local numVersions  = false   
+      local mpath        = mpathA[i]
+      local vv           = availT[mpath] or {}
+      for sn, v in pairs(vv) do
+         local a         = locationT[sn]           
+         local total     = #v
+         local hidden    = 0
+
+         if (hidden) then
+            for i = 1,total do
+               if (v[i].version:sub(1,1) == ".") then
+                  hidden = hidden + 1
+               end
+            end
+         end
+         v.total  = total
+         v.hidden = hidden
+
+         if (a) then
+            defaultEntry = a.default
+            defaultKind  = defaultEntry.kind
+            parseV       = defaultEntry.parseV
+            defaultFn    = defaultEntry.fn
+            numVersions  = defaultEntry.numVersions
+         else
+            a            = {}
+            defaultEntry = {}
+            defaultKind  = "unknown"
+            defaultFn    = false
+            parseV       = " "
+            numVersions  = 0
+         end
+         local value = {mpath = mpath, file = pathJoin(mpath,sn)}
+
+         local changed = false
+
+         if (defaultKind ~= "marked") then
+            if (v.default) then
+               defaultFn   = v.default.fn
+               defaultKind = "marked"
+               changed     = true
+               numVersions = numVersions + total
+            end
+         end
+         if (defaultKind ~= "marked") then
+            local entry  = v[total]
+            local pv     = entry.parseV 
+            numVersions  = numVersions + total
+            if (total == 0 or pv > parseV) then
+               defaultKind = "last"
+               parseV      = pv
+               defaultFn   = entry.fn
+               changed     = true
+            end
+         end
+         if (changed) then
+            defaultEntry.kind   = defaultKind
+            defaultEntry.parseV = parseV or " "
+            defaultEntry.fn     = defaultFn
+         end
+         defaultEntry.numVersions = numVersions
+         defaultEntry.num         = max(numVersions, #a+1)
+         --dbg.print{"sn: ",sn,", numVersions: ",numVersions,", #a+1: ",#a+1," ,dfltFn: ",defaultFn,"\n"}
+         
+         a[#a+1]               = value
+         locationT[sn]         = a
+         locationT[sn].default = defaultEntry
+         
+      end
+   end
+         
+   if (dbg.active()) then
+      dbg.print{"availT: \n"}
+      for mpath, vv in Pairs(availT) do
+         dbg.print{"  mpath: ", mpath,":\n"}
+
+         for sn , v in Pairs(vv) do
+            dbg.print{"    ",sn,"(t: ",v.total,", h: ",v.hidden,"):"}
+            for i = 1, #v do
+               io.stderr:write(" ",v[i].version,",")
+            end
+            io.stderr:write("\n")
+         end
+      end
+      dbg.print{"locationT: \n"}
+      for sn, vv in Pairs(locationT) do
+         dbg.print{"  sn: ", sn,":\n"}
+         for i = 1, #vv do
+            dbg.print{"    ",vv[i].file,"\n"}
+         end
+         if (vv.default) then
+            dbg.print{"    ",vv.default.kind," Default: ",vv.default.fn,"\n"}
+         end
+      end
+   end
+   dbg.fini("MT:_build_locationTbl")
+   return locationT, availT
+end
+
+--------------------------------------------------------------------------
+-- Translate a version 1 MT into current version.
+-- @param self An MT object.
+-- @param v1 A version 1 MT object.
+-- @return A new version of MT object.
 function M.convertMT(self, v1)
    local active = v1.active
    local a      = active.Loaded
@@ -569,16 +631,24 @@ function M.convertMT(self, v1)
 end
 
 --------------------------------------------------------------------------
--- Get/Set functions for shortTime and rebuild time for cache.
-
+-- Return the rebuild time.
+-- @param self An MT object.
 function M.getRebuildTime(self)
    return self.c_rebuildTime
 end
 
+--------------------------------------------------------------------------
+-- Return the shortTime time.
+-- @param self An MT object.
 function M.getShortTime(self)
    return self.c_shortTime
 end
 
+--------------------------------------------------------------------------
+-- Record the long and short time.
+-- @param self An MT object.
+-- @param long The long time before rebuilting user cache.
+-- @param short The short time before rebuilting user cache.
 function M.setRebuildTime(self, long, short)
    dbg.start{"MT:setRebuildTime(long: ",long,", short: ",short,")",level=2}
    self.c_rebuildTime = long
@@ -587,8 +657,9 @@ function M.setRebuildTime(self, long, short)
 end
 
 --------------------------------------------------------------------------
--- setupMPATH(): Build locationTbl and availT based on new MODULEPATH.
-
+-- Build locationTbl and availT based on new MODULEPATH.
+-- @param self An MT object.
+-- @param mpath the MODULEPATH.
 local function setupMPATH(self,mpath)
    dbg.start{"MT:setupMPATH(self,mpath: \"",mpath,"\")"}
    self._same = self:sameMPATH(mpath)
@@ -599,12 +670,13 @@ local function setupMPATH(self,mpath)
 end
 
 --------------------------------------------------------------------------
--- MT:mt(): Public access to MT function.  For the most part this is a
---          singleton class.  The trouble is that there is a stack of
---          MT on certain occations.  So this member function will construct
---          one, then clone itself.  This way there is an original one for
---          later comparison.
-
+-- Public access to MT function.  For the most part this is a
+-- singleton class.  The trouble is that there is a stack of
+-- MT on certain occations.  So this member function will construct
+-- one, then clone itself.  This way there is an original one for
+-- later comparison.
+-- @param self An MT object
+-- @return An MT object.
 function M.mt(self)
    if (not s_mt) then
       dbg.start{"mt()"}
@@ -625,10 +697,10 @@ function M.mt(self)
    return s_mt
 end
 
---------------------------------------------------------------------------
--- MT:cloneMT(): deepcopy and push on stack
 
 local dcT = {function_immutable = true, metatable_immutable = true}
+--------------------------------------------------------------------------
+-- deepcopy and push on stack
 function M.cloneMT()
    --dbg.start{"MT.cloneMT()"}
    local mt = deepcopy(s_mt, dcT)
@@ -639,15 +711,14 @@ function M.cloneMT()
 end
 
 --------------------------------------------------------------------------
--- MT:pushMT(): push self on stack.
-
+-- push self on stack.
+-- @param self An MT object.
 function M.pushMT(self)
    s_mtA[#s_mtA+1] = self
 end
 
 --------------------------------------------------------------------------
--- MT:popMT(): Pop the stack and set [[s_mt]] to be the current value.
-
+-- Pop the stack and set *s\_mt* to be the current value.
 function M.popMT()
    dbg.start{"MT.popMT()"}
    s_mt = s_mtA[#s_mtA-1]
@@ -658,8 +729,7 @@ end
 
 
 --------------------------------------------------------------------------
--- MT:origMT(): Return the original MT from bottom of stack.
-
+-- Return the original MT from bottom of stack.
 function M.origMT()
    dbg.start{"MT.origMT()"}
    dbg.print{"Original s_mtA[1]: ",tostring(s_mtA[1]),"\n", level=2}
@@ -670,20 +740,21 @@ end
 
 
 --------------------------------------------------------------------------
--- MT:getMTfromFile(): Read in a user collection of modules and make it
---                     the new value of [[s_mt]].  This routine is probably
---                     too complicated by half.  The idea is that we read
---                     the collection to get the list of modules requested.
---                     We also need the base MODULEPATH as a replacement.
+-- Read in a user collection of modules and make it
+-- the new value of [[s_mt]].  This routine is probably
+-- too complicated by half.  The idea is that we read
+-- the collection to get the list of modules requested.
+-- We also need the base MODULEPATH as a replacement.
 --
---  To complicate things we must check for:
---    a) make sure that the hash values are the same between old and new.
---    b) make sure that the system base path has not changed.  To detect this
---       there are now two base modulepaths.  The system base modulepath is
---       the one when there is no _ModuleTable_ in the environment.  Then there
---       is a second one which contains any module use commands by the user.
-
-
+-- To complicate things we must check for:
+--    1.  make sure that the hash values are the same between old and new.
+--    2.  make sure that the system base path has not changed.  To detect this
+--        there are now two base modulepaths.  The system base modulepath is
+--        the one when there is no _ModuleTable_ in the environment.  Then there
+--        is a second one which contains any module use commands by the user.
+-- @param self An MT object
+-- @param t A table containing the collection filename and the collection name.
+-- @return True or false.
 function M.getMTfromFile(self,t)
    dbg.start{"mt:getMTfromFile(",t.fn,")"}
    local f              = io.open(t.fn,"r")
@@ -703,11 +774,12 @@ function M.getMTfromFile(self,t)
    -- Save module name in hash table "t"
    -- with Hash Sum as value
 
-   local restore = true
-   local l_mt    = new(self, s, restore)
-   local mpath   = l_mt._MPATH
+   local restoreFn = t.fn
+   dbg.print{"s: \"",s,"\"\n"}
+   local l_mt      = new(self, s, restoreFn)
+   local mpath     = l_mt._MPATH
 
-   local activeA = l_mt:list("userName","active")
+   local activeA   = l_mt:list("userName","active")
 
    ---------------------------------------------
    -- If any module specified in the "default" file
@@ -835,17 +907,22 @@ function M.getMTfromFile(self,t)
 
    aa = {}
    s_mt:setHashSum()
-   for sn, v  in pairs(t) do
+   for sn, v  in pairsByKeys(t) do
       dbg.print{"HASH sn: ",sn, ", t hash: ",v, "s hash: ", s_mt:getHash(sn), "\n"}
       if(v ~= s_mt:getHash(sn)) then
          aa[#aa + 1] = sn
       end
    end
 
-
    if (#aa > 0) then
-      LmodWarning("The following modules have changed: ", concatTbl(aa,", "),"\n")
-      LmodWarning("Please re-create this collection.\n")
+      LmodWarning("One or more modules in your ",collectionName,
+                  " collection have changed: \"", concatTbl(aa,"\", \""),"\".")
+      LmodMessage("To rebuild the collection, load the modules you wish then do:")
+      LmodMessage("  $ module save ",collectionName)
+      LmodMessage("If you no longer want this module collection do:")
+      LmodMessage("  rm ~/.lmod.d/",collectionName,"\n")
+      LmodMessage("For more information execute 'module help' or " ..
+                  "see www.tacc.utexas.edu/tacc-projects/lmod/user-guide/loading-modules\n")
       return false
    end
 
@@ -868,7 +945,10 @@ function M.getMTfromFile(self,t)
 end
 
 --------------------------------------------------------------------------
--- resolveMpathChanges: Handle when MODULEPATH is changed outside of Lmod
+-- Handle when MODULEPATH is changed outside of Lmod
+-- @param self An MT object.
+-- @param currentMPATH Current MODULEPATH
+-- @param baseMPATH original MODULEPATH
 function M.resolveMpathChanges(self, currentMPATH, baseMPATH)
    dbg.start{"MT:resolveMpathChanges(currentMPATH, baseMPATH)"}
    local usrMpathA  = path2pathA(currentMPATH)
@@ -928,8 +1008,7 @@ end
 -- returns true when the count is zero and self._changePATH is also true.
 -- It then changes self._changePATH to nil so future calls to
 -- safeToCheckZombies will be false.
-
-
+-- @param self An MT object
 function M.changePATH(self)
    if (not self._changePATH) then
       assert(self._changePATHCount == 0)
@@ -940,6 +1019,9 @@ function M.changePATH(self)
    --          " count: ",self._changePATHCount,"\n"}
  end
 
+--------------------------------------------------------------------------
+-- Begin operation.  Used in conjunction with *MT:changePATH()*
+-- @param self An MT object
 function M.beginOP(self)
    if (self._changePATH == true) then
       self._changePATHCount = self._changePATHCount + 1
@@ -947,6 +1029,9 @@ function M.beginOP(self)
    --dbg.print{"MT:beginOP: self._changePATH: ",self._changePATH, " count: ",self._changePATHCount,"\n"}
 end
 
+--------------------------------------------------------------------------
+-- End operation.  Used in conjunction with *MT:changePATH()*
+-- @param self An MT object
 function M.endOP(self)
    if (self._changePATH == true) then
       self._changePATHCount = max(self._changePATHCount - 1, 0)
@@ -954,10 +1039,16 @@ function M.endOP(self)
    --dbg.print{"MT:endOP: self._changePATH: ",self._changePATH, " count: ",self._changePATHCount,"\n"}
 end
 
+--------------------------------------------------------------------------
+-- Return if in zombie state.
+-- @param self An MT object
 function M.zombieState(self)
    return self._changePATHCount == 0 and self._changePATH
 end
 
+--------------------------------------------------------------------------
+-- Report if clear of zombies.
+-- @param self An MT object
 function M.safeToCheckZombies(self)
    local result = self._changePATHCount == 0 and self._changePATH
    local s      = (result) and "true" or "nil"
@@ -967,10 +1058,9 @@ function M.safeToCheckZombies(self)
    return result
 end
 
---------------------------------------------------------------------------
--- Get/Set functions for family.
-
 s_familyA = false
+--------------------------------------------------------------------------
+-- Build the name of the *family* env. variable.
 local function buildFamilyPrefix()
    if (not s_familyA) then
       s_familyA    = {}
@@ -984,6 +1074,11 @@ local function buildFamilyPrefix()
 end
 
 
+--------------------------------------------------------------------------
+-- Set the family
+-- @param self An MT object
+-- @param familyNm 
+-- @param nName
 function M.setfamily(self,familyNm,mName)
    local results = self.family[familyNm]
    self.family[familyNm] = mName
@@ -995,6 +1090,10 @@ function M.setfamily(self,familyNm,mName)
    return results
 end
 
+--------------------------------------------------------------------------
+-- Unset the family
+-- @param self An MT object
+-- @param familyNm 
 function M.unsetfamily(self,familyNm)
    local familyA = buildFamilyPrefix()
    for i = 1,#familyA do
@@ -1004,6 +1103,10 @@ function M.unsetfamily(self,familyNm)
    self.family[familyNm] = nil
 end
 
+--------------------------------------------------------------------------
+-- Get the family
+-- @param self An MT object
+-- @param familyNm 
 function M.getfamily(self,familyNm)
    if (familyNm == nil) then
       return self.family
@@ -1012,11 +1115,16 @@ function M.getfamily(self,familyNm)
 end
 
 --------------------------------------------------------------------------
--- Simple Get/Set functions.
-
+-- Return the locations for a particular key or the whole location table
+-- for a nil key.
+-- @param self An MT object
+-- @param key
+-- @return for a nil key return the whole location table, otherwise return the
+-- the location for the specified key
 function M.locationTbl(self, key)
    if (not self._locationTbl) then
-      self._locationTbl, self._availT = build_locationTbl(self.mpathA)
+      self._locationTbl, self._availT = self:_build_locationTbl(self.mpathA)
+      dbg.print{"set self._availT\n"}
    end
    if (key == nil) then
       return self._locationTbl
@@ -1024,47 +1132,85 @@ function M.locationTbl(self, key)
    return self._locationTbl[key]
 end
 
+--------------------------------------------------------------------------
+-- Return the *availT* table.
+-- @param self An MT object
 function M.availT(self)
    if (not self._availT) then
-      self._locationTbl, self._availT = build_locationTbl(self.mpathA)
+      self._locationTbl, self._availT = self:_build_locationTbl(self.mpathA)
+      dbg.print{"set self._availT\n"}
    end
    return self._availT
 end
 
+--------------------------------------------------------------------------
+-- Is *mpath* the same as the internal value.
+-- @param self An MT object
+-- @param mpath A MODULEPATH string value.
+-- @return True if the same at the internal value.
 function M.sameMPATH(self, mpath)
    return self._MPATH == mpath
 end
 
+--------------------------------------------------------------------------
+-- Return an array of path elements from the internal value.
+-- @param self An MT object
+-- @return an array of path elements from the internal value.
 function M.module_pathA(self)
    return self.mpathA
 end
 
+--------------------------------------------------------------------------
+-- Build internal array and string from passed in mpath.
+-- @param self An MT object
+-- @param mpath string of the MODULEPATH
 function M.buildMpathA(self, mpath)
    local mpathA = path2pathA(mpath)
    self.mpathA = mpathA
    self._MPATH = concatTbl(mpathA,":")
 end
 
+--------------------------------------------------------------------------
+-- Build internal array for base MODULEPATH.
+-- @param self An MT object
+-- @param mpath string of the MODULEPATH
 function M.buildBaseMpathA(self, mpath)
    self.baseMpathA = path2pathA(mpath)
 end
 
-
+--------------------------------------------------------------------------
+-- Return the string version of base MODULEPATH
+-- @param self An MT object
 function M.getBaseMPATH(self)
    return concatTbl(self.baseMpathA,":")
 end
 
-function M.reEvalModulePath(self)
+--------------------------------------------------------------------------
+-- Force a re-evaluation of the internal copies of *locationT* and *availT*.
+-- @param self An MT object
+-- @param adding 
+-- @param pathEntry
+function M.reEvalModulePath(self, adding, pathEntry)
+   dbg.start{"MT:reEvalModulePath(adding: ",adding,", pathEntry: ",pathEntry,")"}
    self:buildMpathA(varTbl[ModulePath]:expand())
-   self._locationTbl, self._availT = build_locationTbl(self.mpathA)
+   self._locationTbl, self._availT = self:_build_locationTbl(self.mpathA, adding, pathEntry)
+   dbg.print{"set self._availT\n"}
+   dbg.fini("MT:reEvalModulePath")
 end
 
+--------------------------------------------------------------------------
+-- Clear the internal copies of *locationT* and *availT*
+-- @param self An MT object
 function M.clearLocationAvailT(self)
+   dbg.print{"Calling MT:clearLocationAvailT(self)\n"}
    self._locationTbl = false
    self._availT      = false
 end
 
 
+--------------------------------------------------------------------------
+-- Reload all modules. 
+-- @param self An MT object
 function M.reloadAllModules(self)
    dbg.start{"MT:reloadAllModules()"}
    local master = _G.Master:master()
@@ -1097,8 +1243,10 @@ function M.reloadAllModules(self)
 end
 
 --------------------------------------------------------------------------
---  MT:add(): Adds a module to MT.
-
+-- Adds a module to MT.
+-- @param self An MT object
+-- @param t
+-- @param status
 function M.add(self, t, status)
    dbg.start{"MT:add(t,",status,")"}
    dbg.print{"MT:add:  short: ",t.modName,", full: ",t.modFullName,"\n"}
@@ -1124,15 +1272,18 @@ function M.add(self, t, status)
 end
 
 --------------------------------------------------------------------------
--- MT:list(): Return a array of modules currently in MT.  The list is
---            always sorted in loadOrder.
+-- Return a array of modules currently in MT.  The list is
+-- always sorted in loadOrder.
 --
 -- There are three kinds of returns for this member function.
 --    mt:list("userName",...) returns an object containing an table
 --                            which has the short, full, etc.
 --    mt:list("both",...) returns the short and full name of
 --    mt:list(... , ...) returns a simply array of names.
-
+-- @param self An MT object
+-- @param kind
+-- @param status
+-- @return An array of modules matching the kind and status
 function M.list(self, kind, status)
    local mT   = self.mT
    local icnt = 0
@@ -1201,9 +1352,13 @@ function M.list(self, kind, status)
 end
 
 --------------------------------------------------------------------------
--- Simple Get/Set functions for entries in MT.
-
-function M.userName(self, sn)
+-- Return the name of the module that user requested.  It will be short
+-- name if the user requested the default.  Otherwise, it will be the
+-- full name.
+-- @param self An MT object
+-- @param sn the short module name
+-- @return the name of the module.
+function M.usrName(self, sn)
    local mT    = self.mT
    local entry = mT[sn]
    if (entry == nil) then
@@ -1216,6 +1371,11 @@ function M.userName(self, sn)
    return entry.fullName
 end
 
+--------------------------------------------------------------------------
+-- Return the filename associated with the *sn*. 
+-- @param self An MT object
+-- @param sn the short module name
+-- @return The filename.
 function M.fileName(self, sn)
    local mT    = self.mT
    local entry = mT[sn]
@@ -1225,6 +1385,12 @@ function M.fileName(self, sn)
    return entry.FN
 end
 
+--------------------------------------------------------------------------
+-- Set the status.  Typically either *pending* or *active*.
+-- @param self An MT object.
+-- @param sn the short module name.
+-- @param status The status.
+-- @return The filename.
 function M.setStatus(self, sn, status)
    local mT    = self.mT
    local entry = mT[sn]
@@ -1238,6 +1404,12 @@ function M.setStatus(self, sn, status)
    dbg.print{"MT:setStatus(",sn,",",status,")\n"}
 end
 
+--------------------------------------------------------------------------
+-- Get the current status.  Typically either *pending* or *active*.
+-- @param self An MT object.
+-- @param sn the short module name.
+-- @param status The status.
+-- @return The status
 function M.getStatus(self, sn)
    local mT    = self.mT
    local entry = mT[sn]
@@ -1247,11 +1419,22 @@ function M.getStatus(self, sn)
    return nil
 end
 
+--------------------------------------------------------------------------
+-- Does the *sn* exist?
+-- @param self An MT object.
+-- @param sn the short module name.
+-- @return existance.
 function M.exists(self, sn)
    local mT    = self.mT
    return (mT[sn] ~= nil)
 end
 
+--------------------------------------------------------------------------
+-- Does the *sn* exist with a particular *status*.
+-- @param self An MT object.
+-- @param sn the short module name.
+-- @param status The status.
+-- @return existance.
 function M.have(self, sn, status)
    local mT    = self.mT
    local entry = mT[sn]
@@ -1262,6 +1445,9 @@ function M.have(self, sn, status)
 end
 
 
+--------------------------------------------------------------------------
+-- Remove the computed hash values from each entry in the module table.
+-- @param self An MT object.
 function M.hideHash(self)
    local mT   = self.mT
    for k,v in pairs(mT) do
@@ -1271,6 +1457,10 @@ function M.hideHash(self)
    end
 end
 
+--------------------------------------------------------------------------
+-- Mark *sn* entry as being default.
+-- @param self An MT object.
+-- @param sn the short module name.
 function M.markDefault(self, sn)
    local mT    = self.mT
    local entry = mT[sn]
@@ -1279,6 +1469,10 @@ function M.markDefault(self, sn)
    end
 end
 
+--------------------------------------------------------------------------
+-- Mark *sn* entry as being default.
+-- @param self An MT object.
+-- @param sn the short module name.
 function M.default(self, sn)
    local mT    = self.mT
    local entry = mT[sn]
@@ -1288,13 +1482,10 @@ function M.default(self, sn)
    return (entry.default ~= 0)
 end
 
-function M.usrName(self,sn)
-   if (self:default(sn)) then
-      return sn
-   end
-   return self:fullName(sn)
-end
-
+--------------------------------------------------------------------------
+-- Set the load order by using MT:list()
+-- @param self An MT object.
+-- @return the number of entries in *mT*
 function M.setLoadOrder(self)
    local a  = self:list("short","active")
    local mT = self.mT
@@ -1307,6 +1498,11 @@ function M.setLoadOrder(self)
    return sz
 end
 
+--------------------------------------------------------------------------
+-- Return the full name of the module including version if it exists.
+-- @param self An MT object.
+-- @param sn The short name
+-- @return the full name.
 function M.fullName(self, sn)
    local mT    = self.mT
    local entry = mT[sn]
@@ -1316,6 +1512,11 @@ function M.fullName(self, sn)
    return entry.fullName
 end
 
+--------------------------------------------------------------------------
+-- Return the version of a module or "" if it doesn't.
+-- @param self An MT object.
+-- @param sn The short name
+-- @return the version.
 function M.Version(self, sn)
    local full = self:fullName(sn)
    if (not full) then
@@ -1330,15 +1531,25 @@ function M.Version(self, sn)
    return full:sub(j+1,-1)
 end
 
-function M.short(self, sn)
-   local mT    = self.mT
-   local entry = mT[sn]
-   if (entry == nil) then
-      return nil
+--------------------------------------------------------------------------
+-- Clear the hash value.
+-- @param self An MT object.
+-- @param sn The short name.
+-- @return The hash value.
+function M.hideHash(self)
+   local mT   = self.mT
+   for k,v in pairs(mT) do
+      if (v.status == "active") then
+         v.hash    = nil
+      end
    end
-   return entry.short
 end
 
+--------------------------------------------------------------------------
+-- Get the hash value for the entry. 
+-- @param self An MT object.
+-- @param sn The short name.
+-- @return The hash value.
 function M.getHash(self, sn)
    local mT    = self.mT
    local entry = mT[sn]
@@ -1348,88 +1559,9 @@ function M.getHash(self, sn)
    return entry.hash
 end
 
-function M.hideHash(self)
-   local mT   = self.mT
-   for k,v in pairs(mT) do
-      if (v.status == "active") then
-         v.hash    = nil
-      end
-   end
-end
-
-function M.markDefault(self, sn)
-   local mT    = self.mT
-   local entry = mT[sn]
-   if (entry ~= nil) then
-      mT[sn].default = 1
-   end
-end
-
-function M.default(self, sn)
-   local mT    = self.mT
-   local entry = mT[sn]
-   if (entry == nil) then
-      return nil
-   end
-   return (entry.default ~= 0)
-end
-
-function M.usrName(self,sn)
-   if (self:default(sn)) then
-      return sn
-   end
-   return self:fullName(sn)
-end
-
-function M.setLoadOrder(self)
-   local a  = self:list("short","active")
-   local mT = self.mT
-   local sz = #a
-
-   for i = 1,sz do
-      local sn = a[i]
-      mT[sn].loadOrder = i
-   end
-   return sz
-end
-
-function M.fullName(self, sn)
-   local mT    = self.mT
-   local entry = mT[sn]
-   if (entry == nil) then
-      return nil
-   end
-   return entry.fullName
-end
-
-function M.Version(self, sn)
-   local full = self:fullName(sn)
-   if (not full) then
-      return full
-   end
-
-   local i, j = full:find(".*/")
-   if (not j) then
-      return ""
-   end
-
-   return full:sub(j+1,-1)
-end
-
-function M.short(self, sn)
-   local mT    = self.mT
-   local entry = mT[sn]
-   if (entry == nil) then
-      return nil
-   end
-   return entry.short
-end
-
-
 --------------------------------------------------------------------------
--- MT:setHashSum(): Use [[computeHashSum]] to compute hash for each active
---                  module in MT.
-
+-- Use *computeHashSum* to compute hash for each active module in MT.
+-- @param self An MT object.
 function M.setHashSum(self)
    local mT   = self.mT
    dbg.start{"MT:setHashSum()"}
@@ -1488,6 +1620,9 @@ function M.setHashSum(self)
 end
 
 
+--------------------------------------------------------------------------
+-- A debug routine to report the module short name and status.
+-- @param self An MT object.
 function M.reportKeys(self)
    local mT  = self.mT
    for k,v in pairs(mT) do
@@ -1496,6 +1631,11 @@ function M.reportKeys(self)
 end
 
 
+--------------------------------------------------------------------------
+-- Push the inheritance file into a stack.
+-- @param self An MT object.
+-- @param sn the short name.
+-- @param fn the file name.
 function M.pushInheritFn(self,sn,fn)
    local mT    = self.mT
    local fnI   = mT[sn].fnI or {}
@@ -1503,6 +1643,12 @@ function M.pushInheritFn(self,sn,fn)
    mT[sn].fnI  = fnI
 end
 
+--------------------------------------------------------------------------
+-- Pop the inheritance file from the stack.
+-- @param self An MT object.
+-- @param sn the short name.
+-- @param fn the file name.
+-- @return the filename on top of the stack.
 function M.popInheritFn(self,sn)
    local mT   = self.mT
    local fn   = nil
@@ -1516,15 +1662,21 @@ function M.popInheritFn(self,sn)
    return fn
 end
 
+--------------------------------------------------------------------------
+-- Clear the entry for *sn* from the module table.
+-- @param self An MT object.
+-- @param sn The short name.
 function M.remove(self, sn)
    local mT  = self.mT
    mT[sn]    = nil
 end
 
 --------------------------------------------------------------------------
--- MT:add_property() add a property to an active module.
-
-
+-- add a property to an active module.
+-- @param self An MT object.
+-- @param sn The short name
+-- @param name the property name
+-- @param value the value for the property name.
 function M.add_property(self, sn, name, value)
    dbg.start{"MT:add_property(\"",sn,"\", \"",name,"\", \"",value,"\")"}
 
@@ -1565,8 +1717,11 @@ function M.add_property(self, sn, name, value)
 end
 
 --------------------------------------------------------------------------
--- MT:remove_property() remove a property to an active module.
-
+-- Remove a property to an active module.
+-- @param self An MT object.
+-- @param sn The short name
+-- @param name the property name
+-- @param value the value for the property name.
 function M.remove_property(self, sn, name, value)
    dbg.start{"MT:remove_property(\"",sn,"\", \"",name,"\", \"",value,"\")"}
 
@@ -1606,8 +1761,12 @@ function M.remove_property(self, sn, name, value)
 end
 
 --------------------------------------------------------------------------
--- MT:list_property(): What it says.
-
+-- List the property
+-- @param self An MT object.
+-- @param idx The index in the list.
+-- @param sn The short name
+-- @param style How to colorize.
+-- @param legendT The legend table.
 function M.list_property(self, idx, sn, style, legendT)
    dbg.start{"MT:list_property(\"",sn,"\", \"",style,"\")"}
    local mT    = self.mT
@@ -1629,6 +1788,12 @@ function M.list_property(self, idx, sn, style, legendT)
    return resultA
 end
 
+--------------------------------------------------------------------------
+-- Return the value of this property or nil.
+-- @param self An MT object.
+-- @param sn The short name.
+-- @param propName The property name.
+-- @param propValue The property value.
 function M.haveProperty(self, sn, propName, propValue)
    local entry = self.mT[sn]
    if (entry == nil or entry.propT == nil or entry.propT[propName] == nil ) then
@@ -1638,13 +1803,15 @@ function M.haveProperty(self, sn, propName, propValue)
 end
 
 --------------------------------------------------------------------------
--- MT:userLoad(): Mark a module as having been loaded by user request.
---                This is used by MT:reportChanges() to not print. So
---                if a user does this:
---                   $ module swap mvapich2 mvapich2/1.9
---                Lmod will not report that mvapich2 has been reloaded.
-
-function M.userLoad(self, sn,usrName)
+-- Mark a module as having been loaded by user request.
+-- This is used by MT:reportChanges() to not print. So
+-- if a user does this:
+--      $ module swap mvapich2 mvapich2/1.9
+-- Lmod will not report that mvapich2 has been reloaded.
+-- @param self An MT object.
+-- @param sn The short name.
+-- @param usrName The name the user specified for the module.
+function M.userLoad(self, sn, usrName)
    dbg.start{"MT:userLoad(",sn,")"}
    local loadT  = self._loadT
    loadT[sn]    = usrName
@@ -1652,11 +1819,11 @@ function M.userLoad(self, sn,usrName)
 end
 
 --------------------------------------------------------------------------
--- MT:reportChanges(): Compare the original MT with the current one.
---                     Report any modules that have become inactive or
---                     active.  Or report that a module has swapped or a
---                     version has changed.
-
+-- Compare the original MT with the current one.
+-- Report any modules that have become inactive or
+-- active.  Or report that a module has swapped or a
+-- version has changed.
+-- @param self An MT object.
 function M.reportChanges(self)
    local master = systemG.Master:master()
 
@@ -1729,34 +1896,43 @@ function M.reportChanges(self)
 end
 
 --------------------------------------------------------------------------
--- MT:serializeTbl(): A wrapper for serializeTbl and all the white space
---                   removed.
-
+-- A wrapper for serializeTbl.
+-- @param self An MT object.
+-- @param state If true then return serialized table indented, otherwise
+-- extra spaces removed.
+-- @return The serialized table.
 function M.serializeTbl(self, state)
    dbg.print{"self: ",tostring(self),"\n", level=2}
    dbg.print{"s_mt: ",tostring(s_mt),"\n", level=2}
 
    s_mt.activeSize = self:setLoadOrder()
 
-   if (not state) then
+   if (state) then
+      return _G.serializeTbl{ indent=true, name=s_mt:name(), value=s_mt}
+   else
       local s = _G.serializeTbl{ indent=false, name=s_mt:name(), value=s_mt}
       return s:gsub("%s+","")
-   else
-      return _G.serializeTbl{ indent=true, name=s_mt:name(), value=s_mt}
    end
 end
 
+--------------------------------------------------------------------------
+-- Mark a module as sticky.
+-- @param self An MT object.
+-- @param sn the short name
 function M.addStickyA(self, sn)
    local a        = self._stickyA
    local entry    = self.mT[sn]
    local default  = entry.default
-   local userName = self:userName(sn)
+   local userName = self:usrName(sn)
    local fullName = (default == 1 ) and sn or entry.fullName
 
    a[#a+1] = {sn = sn, FN = entry.FN, fullName = fullName,
               userName = userName }
 end
 
+--------------------------------------------------------------------------
+-- Return the array of sticky modules.
+-- @param self An MT object.
 function M.getStickyA(self)
    return self._stickyA
 end

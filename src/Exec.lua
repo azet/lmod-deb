@@ -1,4 +1,11 @@
 --------------------------------------------------------------------------
+-- This class holds a array of strings. These are commands that
+-- the module file  can execute after all the environment variables
+-- have been reported.
+-- @classmod Exec
+require("strict")
+
+--------------------------------------------------------------------------
 -- Lmod License
 --------------------------------------------------------------------------
 --
@@ -32,12 +39,7 @@
 --
 --------------------------------------------------------------------------
 
---------------------------------------------------------------------------
--- Exec:  This class holds a array of strings. These are commands that
---        the module file  can execute after all the environment variables
---        have been reported.
 
-require("strict")
 require("utils")
 local dbg           = require("Dbg"):dbg()
 local concatTbl     = table.concat
@@ -56,6 +58,10 @@ local function new(self)
    return o
 end
 
+--------------------------------------------------------------------------
+-- The Exec Singleton Ctor.
+-- @param self A Exec object
+-- @return a Exec Singleton object.
 function M.exec(self)
    if (not s_exec) then
       dbg.start{"Exec:exec()"}
@@ -65,6 +71,9 @@ function M.exec(self)
    return s_exec
 end
 
+--------------------------------------------------------------------------
+-- Register the command strings.
+-- @param self A Exec object
 function M.register(self, ...)
    local arg = { n = select('#',...), ...}
    local a   = self.a
@@ -76,6 +85,10 @@ function M.register(self, ...)
    end
 end
 
+--------------------------------------------------------------------------
+-- Send the registered commands to stdout so that they can be evalated
+-- by the module command.
+-- @param self A Exec object
 function M.expand(self)
    local a = self.a
 

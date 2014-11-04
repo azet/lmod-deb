@@ -1,4 +1,24 @@
 --------------------------------------------------------------------------
+-- This class is used to detect when a module file changes
+-- in a way that will tell the user that their collection
+-- of modules has to be reformed.  The problem is that if
+-- a modulefile changes the directory that it prepends to
+-- MODULEPATH or prereq or conflicts change, then the
+-- current is considered no-longer valid.
+--
+-- The way this works is that this class sets most Lmod functions to be
+-- quiet.  Mainly any loads, or changes to MODULEPATH generate output.
+-- This output is collect into the array *ShowResultsA*.
+-- Then the command computeHashSum takes that array output and computes
+-- either mdsum or sha1sum of the text.   When a collection is stored,
+-- this hash sum is computed.  When a collection is reloaded the hash sum
+-- is recomputed for each modulefile.  If the sums are different then
+-- the collection is no longer valid.
+-- @classmod MC_ComputeHash
+
+require("strict")
+
+--------------------------------------------------------------------------
 -- Lmod License
 --------------------------------------------------------------------------
 --
@@ -32,35 +52,18 @@
 --
 --------------------------------------------------------------------------
 
---------------------------------------------------------------------------
--- MC_ComputeHash:  This class is used to detect when a module file changes
---                  in a way that will tell the user that their collection
---                  of modules has to be reformed.  The problem is that if
---                  a modulefile changes the directory that it prepends to
---                  MODULEPATH or prereq or conflicts change, then the
---                  current is considered no-longer valid.
---
--- The way this works is that this class sets most Lmod functions to be
--- quiet.  Mainly any loads, or changes to MODULEPATH generate output.
--- This output is collect into the array [[ComputeModuleResultsA]].
--- Then the command computeHashSum takes that array output and computes
--- either mdsum or sha1sum of the text.   When a collection is stored,
--- this hash sum is computed.  When a collection is reloaded the hash sum
--- is recomputed for each modulefile.  If the sums are different then
--- the collection is no longer valid.
-
-require("strict")
 require("utils")
 
 MC_ComputeHash             = inheritsFrom(MasterControl)
 MC_ComputeHash.my_name     = "MC_ComputeHash"
+MC_ComputeHash.my_sType    = "load"
 MC_ComputeHash.my_tcl_mode = "load"
 local M                    = MC_ComputeHash
 local dbg                  = require("Dbg"):dbg()
 local concatTbl            = table.concat
-local A                    = ComputeModuleResultsA
+local A                    = ShowResultsA
 
-function ShowCmd(name, ...)
+local function ShowCmd(name, ...)
    A[#A+1] = ShowCmdStr(name, ...)
 end
 
@@ -92,50 +95,89 @@ M.error                = MasterControl.quiet
 M.message              = MasterControl.quiet
 
 
+--------------------------------------------------------------------------
+-- Print always_load and arguments
+-- @param self A MasterControl object
+-- @param mA An array of module names (MName objects)
 function M.always_load(self, mA)
    A[#A+1] = ShowCmdA("always_load", mA)
 end
 
+--------------------------------------------------------------------------
+-- Print always_unload and arguments
+-- @param self A MasterControl object
+-- @param mA An array of module names (MName objects)
 function M.always_unload(self, mA)
    A[#A+1] = ShowCmdA("always_unload", mA)
 end
 
+--------------------------------------------------------------------------
+-- Print prepend_path command iff the env var. is MODULEPATH.
+-- @param self A MasterControl object
+-- @param t input table
 function M.prepend_path(self, t)
    local name = t[1]
    if (name ~= "MODULEPATH") then return end
    ShowCmd("prepend_path", name, t[2], t.sep)
 end
 
+--------------------------------------------------------------------------
+-- Print append_path command iff the env var. is MODULEPATH.
+-- @param self A MasterControl object
+-- @param t input table
 function M.append_path(self, t)
    local name = t[1]
    if (name ~= "MODULEPATH") then return end
    ShowCmd("append_path", name, t[2], t.sep)
 end
 
+--------------------------------------------------------------------------
+-- Print remove_path command iff the env var. is MODULEPATH.
+-- @param self A MasterControl object
+-- @param t input table
 function M.remove_path(self, t)
    local name = t[1]
    if (name ~= "MODULEPATH") then return end
    ShowCmd("remove_path", name, t[2], t.sep)
 end
 
+--------------------------------------------------------------------------
+-- Print load command.
+-- @param self A MasterControl object
+-- @param mA An array of module names (MName objects)
 function M.load(self, mA)
    A[#A+1] = ShowCmdA("load", mA)
 end
 
+--------------------------------------------------------------------------
+-- Print load command.
+-- @param self A MasterControl object
+-- @param mA An array of module names (MName objects)
 function M.load_usr(self, mA)
    A[#A+1] = ShowCmdA("load", mA)
 end
 
+--------------------------------------------------------------------------
+-- Print try_load command.
+-- @param self A MasterControl object
+-- @param mA An array of module names (MName objects)
 function M.try_load(self, mA)
    A[#A+1] = ShowCmdA("try_load", mA)
 end
 
 M.try_add = M.try_load
 
+--------------------------------------------------------------------------
+-- Print the inherit command.
+-- @param self A MasterControl object
 function M.inherit(self, ...)
    ShowCmd("inherit",...)
 end
 
+--------------------------------------------------------------------------
+-- Print the unload command.
+-- @param self A MasterControl object
+-- @param mA An array of module names (MName objects)
 function M.unload(self, mA)
    A[#A+1] = ShowCmdA("unload", mA)
 end
