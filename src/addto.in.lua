@@ -1,6 +1,19 @@
 #!@path_to_lua@/lua
 -- -*- lua -*-
 
+-----------------------------------------------------------------
+-- addto:  Add to a path like environment variable.
+--
+-- Standard usage is Bash:
+--
+-- $ unset FOO
+-- $ export FOO=$(addto --append FOO a b c)
+-- $ echo "   FOO: %$FOO%"
+--     FOO: %a:b:c%
+-- $ export FOO=$(addto --append FOO d e f); echo "   FOO: %$FOO%"
+--     FOO: %a:b:c:d:e:f%
+-- @script addto
+
 --------------------------------------------------------------------------
 -- Lmod License
 --------------------------------------------------------------------------
@@ -35,17 +48,6 @@
 --
 --------------------------------------------------------------------------
 
------------------------------------------------------------------
--- addto:  Add to a path like environment variable.
---
--- Standard usage is Bash:
---
--- $ unset FOO
--- $ export FOO=$(addto --append FOO a b c)
--- $ echo "   FOO: %$FOO%"
---     FOO: %a:b:c%
--- $ export FOO=$(addto --append FOO d e f); echo "   FOO: %$FOO%"
---     FOO: %a:b:c:d:e:f%
 
 local cmd = arg[0]
 
@@ -105,10 +107,12 @@ function myClean(cleanFlg)
                 if (path:sub(-1,-1) == '/') then
                    path = path:sub(1,-2)
                 end
-                return path
+                if (path == "") then path = false end
+                return path 
              end
    else
       return function (path)
+                if (path == "") then path = false end
                 return path
              end
    end
@@ -141,64 +145,52 @@ function main()
    local insert    = myInsert(masterTbl.appendFlg, masterTbl.existFlg)
    local cleanPath = myClean(cleanFlg)
    local chkDir    = myChkDir(masterTbl.existFlg)
+   remove(pargs,1)
 
+   ------------------------------------------------------------------------
+   -- Convert empty string input values into false and clean path if requested
+   local valueA    = {}
+   for i = 1,#pargs do
+      valueA[i] = cleanPath(pargs[i])
+   end
+   
+
+   ------------------------------------------------------------------------
+   -- Convert empty string envVar values into false and clean path if requested
    if (envVar) then
       for v in envVar:split(sep) do
 	 envVarA[#envVarA + 1] = cleanPath(v)
       end
    end
 
-   if (masterTbl.delete) then
-      local entry = masterTbl.delete
-      local a     = envVarA
-      envVarA = {}
-      for i = 1,#a do
-         if (entry ~= a[i]) then
-            envVarA[#envVarA+1] = a[i]
-         end
+   ------------------------------------------------------------------------
+   -- Make a hash table of input values
+   local valueT = {}
+   for i = 1, #valueA do
+      valueT[valueA[i]] = true
+   end
+
+   ------------------------------------------------------------------------
+   -- Remove any entries in input from envVarA
+   local newA = {}
+   for i = 1, #envVarA do
+      local v = envVarA[i]
+      if (not valueT[v]) then
+         if (v == false) then v = "" end
+         newA[#newA+1] = v
       end
    end
 
-   remove(pargs,1)
-
-   for _,v in ipairs(pargs) do
-      v = cleanPath(v)
-      for i,path in ipairs(envVarA) do
-	 if (v == path) then
-	    remove(envVarA, i)
-	    break
-	 end
-      end
-
-      insert(envVarA, v)
+   ------------------------------------------------------------------------
+   -- Insert/append new entries with magic insert function.
+   
+   for i = 1, #valueA do
+      local v = valueA[i]
+      if (v == false) then v = "" end
+      insert(newA, v)
    end
 
-   if (cleanFlg) then
-      local t = {}
-      local tt = {}
-      for i,v in ipairs(envVarA) do
-         if ( not tt[v] and chkDir(v)) then
-            t[i] = v
-            tt[v] = i
-         end
-      end
-      envVarA = {}
-      for k, v in pairsByKeys(t) do
-         envVarA[#envVarA+1] = v
-      end
-   end
-
-   if (masterTbl.verbosityLevel > 0) then
-      for i,v in ipairs(envVarA) do
-	 io.stdout:write(i,"%",v,"%\n")
-      end
-   end
-
-   if (envVarA[#envVarA] == "") then
-      envVarA[#envVarA+1] = ""
-   end
-
-   io.stdout:write(concat(envVarA,sep),"\n")
+   io.stdout:write(concat(newA,sep),"\n")
 end
 
 

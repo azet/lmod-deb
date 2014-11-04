@@ -1,3 +1,4 @@
+CC                        := @CC@
 PATH_TO_SRC               := @PATH_TO_SRC@
 path_to_src               := PATH_TO_SRC
 ifeq ($(PATH_TO_SRC),@$(path_to_src)@)
@@ -10,6 +11,8 @@ ifeq ($(HAVE_LUA_JSON),yes)
   TOOL_SRC                := $(filter-out $(PATH_TO_SRC)/tools/json.lua, $(TOOL_SRC))
 endif
 
+export IGNORE_DIRS        := $(shell $(PATH_TO_SRC)/src/ignore_dirs_converter @IGNORE_DIRS@)
+REDIRECT                  := @REDIRECT@
 LMOD_FULL_SETTARG_SUPPORT := $(shell echo "@SETTARG@"       | tr '[:upper:]' '[:lower:]')
 USE_DOT_FILES             := $(shell echo "@USE_DOT_FILES@" | tr '[:upper:]' '[:lower:]')
 PREPEND_BLOCK     	  := $(shell echo "@PREPEND_BLOCK@" | tr '[:upper:]' '[:lower:]')
@@ -22,7 +25,9 @@ ALLOW_TCL_MFILES          := @ALLOW_TCL_MFILES@
 MPATH_AVAIL               := @MPATH_AVAIL@
 DUPLICATE_PATHS           := @DUPLICATE_PATHS@
 SHORT_TIME        	  := @SHORT_TIME@
+AUTO_SWAP        	  := @AUTO_SWAP@
 SPIDER_CACHE_DIRS 	  := @SPIDER_CACHE_DIRS@
+EXPORT_MODULE             := @EXPORT_MODULE@
 PATH_TO_HASHSUM   	  := @PATH_TO_HASHSUM@
 PATH_TO_LUA	  	  := @PATH_TO_LUA@
 PATH_TO_PAGER	  	  := @PATH_TO_PAGER@
@@ -44,17 +49,19 @@ TOOLS                     := $(prefix)/$(package)/$(version)/tools
 SETTARG                   := $(prefix)/$(package)/$(version)/settarg
 INIT		  	  := $(prefix)/$(package)/$(version)/init
 LMOD_MF 	  	  := $(prefix)/$(package)/$(version)/modulefiles/Core
+MAN_PAGES                 := $(prefix)/$(package)/$(version)/share/man/cat1
 LMOD_MF_SOURCE            := MF/*.version.lua
 SETTARG_SOURCE            := settarg/*.lua  settarg/targ.in
 
-DIRLIST		  	  := $(DESTDIR)$(LIBEXEC) $(DESTDIR)$(TOOLS) $(DESTDIR)$(SETTARG)             \
-                             $(DESTDIR)$(SHELLS)                                                      \
-                             $(DESTDIR)$(INIT) $(DESTDIR)$(LIB) $(DESTDIR)$(LMOD_MF)
+DIRLIST		  	  := $(DESTDIR)$(LIBEXEC) $(DESTDIR)$(TOOLS) $(DESTDIR)$(SETTARG) \
+                             $(DESTDIR)$(SHELLS) $(DESTDIR)$(INIT) $(DESTDIR)$(LIB)       \
+                             $(DESTDIR)$(LMOD_MF) $(DESTDIR)$(MAN_PAGES)
 
-
-STANDALONE_PRGM   	  := src/lmod.in.lua src/addto.in.lua src/getmt.in.lua src/processMT.in.lua   \
-                             src/spider.in.lua src/processModuleUsage.in.lua src/reportUsers.in.lua   \
-                             src/clearMT_cmd.in.lua src/ml_cmd.in.lua src/spiderCacheSupport.in.lua   \
+STANDALONE_PRGM   	  := src/lmod.in.lua src/addto.in.lua src/getmt.in.lua      \
+                             src/processMT.in.lua src/spider.in.lua                 \
+                             src/processModuleUsage.in.lua src/reportUsers.in.lua   \
+                             src/clearMT_cmd.in.lua src/ml_cmd.in.lua               \
+                             src/spiderCacheSupport.in.lua                          \
                              src/sh_to_modulefile.in.lua
 STANDALONE_PRGM           := $(patsubst %, $(PATH_TO_SRC)/%, $(STANDALONE_PRGM))
 SHELL_INIT	  	  := bash.in csh.in ksh.in tcsh.in zsh.in sh.in perl.in                       \
@@ -95,64 +102,78 @@ ifneq ($(HAVE_LUA_TERM),yes)
   LIB  := $(prefix)/$(package)/$(version)/lib
 endif
 
+.PHONY: test pkgs man_pages
 
-.PHONY: test pkgs
-
-all:
+all: 
 	@echo done
 
-pre-install: $(DIRLIST) shell_init startup spiderCacheSupport libexec \
-             Inst_Tools Inst_Shells Inst_Settarg Inst_Lmod_MF $(PKGS) other_tools
+pre-install: $(DIRLIST) shell_init startup libexec spiderCacheSupport Inst_Tools \
+             Inst_Shells Inst_Settarg Inst_Lmod_MF $(PKGS) other_tools man_pages
 
 install: pre-install  zsh_tab_funcs
+	$(MAKE) PKGV=$(PKG) shell_init
 	$(RM) $(DESTDIR)$(PKG)
 	ln -s $(version) $(DESTDIR)$(PKG)
 
 echo:
 	@echo Version: $(version)
+	@echo GIT_VERSION: $(GIT_VERSION)
+	@echo IGNORE_DIRS: $(IGNORE_DIRS)
 
+man_pages:
+	$(PATH_TO_LUA)/lua $(PATH_TO_SRC)/src/lmod.in.lua bash --help >/dev/null 2> $(DESTDIR)$(MAN_PAGES)/module.1
 
 $(DIRLIST) :
 	mkdir -p $@
 
 __installMe:
-	-for i in $(FILELIST); do                                     	   \
-           bareN=$${i##*/};                                           	   \
-           fn=$${bareN%%.in*};                                        	   \
-           ext=$${bareN#*.};                                          	   \
-	   : echo "DIRLOC/fn: $(DIRLOC)/$$fn";                             \
-           sed  -e 's|@PREFIX@|$(prefix)|g'                            	   \
-	        -e 's|@path_to_lua@|$(PATH_TO_LUA)|g'                 	   \
-	        -e 's|@path_to_hashsum@|$(PATH_TO_HASHSUM)|g'         	   \
-	        -e 's|^#!/usr/bin/env tclsh$$|#!$(PATH_TO_TCLSH)|g'    	   \
-	        -e 's|@path_to_pager@|$(PATH_TO_PAGER)|g'             	   \
-	        -e 's|@case_independent_sorting@|$(CASE_INDEPENDENT_SORTING)|g' \
+	-for i in $(FILELIST); do                                     	   	  \
+           bareN=$${i##*/};                                           	   	  \
+           fn=$${bareN%%.in*};                                        	   	  \
+           ext=$${bareN#*.};                                          	   	  \
+	   : echo "DIRLOC/fn: $(DIRLOC)/$$fn";                             	  \
+           sed  -e 's|@PREFIX@|$(prefix)|g'                            	   	  \
+	        -e 's|@path_to_lua@|$(PATH_TO_LUA)|g'                 	   	  \
+	        -e 's|@path_to_hashsum@|$(PATH_TO_HASHSUM)|g'         	   	  \
+	        -e 's|^#!/usr/bin/env tclsh$$|#!$(PATH_TO_TCLSH)|g'    	   	  \
+	        -e 's|@bash_err_to_out@|$(BASH_ERR_TO_OUT)|g'         	   	  \
+	        -e 's|@tcsh_err_to_out@|$(TCSH_ERR_TO_OUT)|g'         	   	  \
+	        -e 's|@path_to_pager@|$(PATH_TO_PAGER)|g'             	   	  \
+	        -e 's|@case_independent_sorting@|$(CASE_INDEPENDENT_SORTING)|g'   \
                 -e 's|@lmod_full_settarg_support@|$(LMOD_FULL_SETTARG_SUPPORT)|g' \
-                -e 's|@use_dot_files@|$(USE_DOT_FILES)|g'             	   \
-                -e 's|@git@|$(GIT_VERSION)|g'                              \
-                -e 's|@have_lua_term@|$(HAVE_LUA_TERM)|g'                  \
-                -e 's|@have_lua_json@|$(HAVE_LUA_JSON)|g'                  \
-	        -e 's|@ancient@|$(ANCIENT)|g'                         	   \
-	        -e 's|@prepend_block@|$(PREPEND_BLOCK)|g'             	   \
-	        -e 's|@colorize@|$(COLORIZE)|g'                       	   \
-	        -e 's|@duplicate_paths@|$(DUPLICATE_PATHS)|g'      	   \
-	        -e 's|@allow_tcl_mfiles@|$(ALLOW_TCL_MFILES)|g'      	   \
-	        -e 's|@mpath_avail@|$(MPATH_AVAIL)|g'            	   \
-	        -e 's|@short_time@|$(SHORT_TIME)|g'                   	   \
-	        -e 's|@cacheDirs@|$(SPIDER_CACHE_DIRS)|g'             	   \
-	        -e 's|@updateSystemFn@|$(UPDATE_SYSTEM_FN)|g'         	   \
-	        -e 's|@modulepath_root@|$(MODULEPATH_ROOT)|g'         	   \
-                -e 's|@PKGV@|$(PKGV)|g'                                    \
-                -e 's|@PKG@|$(PKG)|g'         < $$i > $(DIRLOC)/$$fn; 	   \
-            [ "$$ext" = "in.lua" -o "$$ext" = "tcl" -o "$$ext" = "in" ] && \
-               chmod +x $(DIRLOC)/$$fn;                                    \
-            if [ "$$ext" = "version.lua" ]; then                           \
-               mname=$${bareN%%.*};                                        \
-	       : echo "DIRLOC: $(DIRLOC)/$$mname";                         \
-	       mkdir -p $(DIRLOC)/$$mname;                                 \
-               mv $(DIRLOC)/$$fn $(DIRLOC)/$$mname/$(version).lua;         \
-            fi;                                                            \
+                -e 's|@use_dot_files@|$(USE_DOT_FILES)|g'             	   	  \
+                -e 's|@git@|$(GIT_VERSION)|g'                              	  \
+                -e 's|--@ignore_dirs@--|$(IGNORE_DIRS)|g'                         \
+                -e 's|@have_lua_term@|$(HAVE_LUA_TERM)|g'                  	  \
+                -e 's|@have_lua_json@|$(HAVE_LUA_JSON)|g'                  	  \
+	        -e 's|@redirect@|$(REDIRECT)|g'                       	   	  \
+	        -e 's|@auto_swap@|$(AUTO_SWAP)|g'                      	   	  \
+	        -e 's|@export_module@|$(EXPORT_MODULE)|g'             	   	  \
+	        -e 's|@ancient@|$(ANCIENT)|g'                         	   	  \
+	        -e 's|@prepend_block@|$(PREPEND_BLOCK)|g'             	   	  \
+	        -e 's|@colorize@|$(COLORIZE)|g'                       	   	  \
+	        -e 's|@duplicate_paths@|$(DUPLICATE_PATHS)|g'      	   	  \
+	        -e 's|@allow_tcl_mfiles@|$(ALLOW_TCL_MFILES)|g'      	   	  \
+	        -e 's|@mpath_avail@|$(MPATH_AVAIL)|g'            	   	  \
+	        -e 's|@short_time@|$(SHORT_TIME)|g'                   	   	  \
+	        -e 's|@cacheDirs@|$(SPIDER_CACHE_DIRS)|g'             	   	  \
+	        -e 's|@updateSystemFn@|$(UPDATE_SYSTEM_FN)|g'         	   	  \
+	        -e 's|@modulepath_root@|$(MODULEPATH_ROOT)|g'         	   	  \
+                -e 's|@PKGV@|$(PKGV)|g'                                    	  \
+                -e 's|@PKG@|$(PKG)|g'         < $$i > $(DIRLOC)/$$fn; 	   	  \
+            [ "$$ext" = "in.lua" -o "$$ext" = "tcl" -o "$$ext" = "in" ] && 	  \
+               chmod +x $(DIRLOC)/$$fn;                                    	  \
+            if [ "$$ext" = "version.lua" ]; then                           	  \
+               mname=$${bareN%%.*};                                        	  \
+	       : echo "DIRLOC: $(DIRLOC)/$$mname";                         	  \
+	       mkdir -p $(DIRLOC)/$$mname;                                 	  \
+               mv $(DIRLOC)/$$fn $(DIRLOC)/$$mname/$(version).lua;         	  \
+            fi;                                                            	  \
         done
+
+generate_doc:
+	ldoc .
+
 
 shell_init: $(SHELL_INIT)
 	$(MAKE) FILELIST="$^" DIRLOC=$(DESTDIR)$(INIT)    __installMe
@@ -176,14 +197,15 @@ src/computeHashSum: $(ComputeHashSum)
 pkgs:
 	cd $(PATH_TO_SRC)/pkgs; \
         $(MAKE) LUA_INC=$(LUA_INCLUDE)  LIB=$(DESTDIR)$(LIB) \
-                SHARE=$(DESTDIR)$(LIBEXEC) install
+                SHARE=$(DESTDIR)$(LIBEXEC) CC=$(CC) install
 
 zsh_tab_funcs: $(ZSH_FUNCS)
-	-if [ -n "$(ZSH_SITE_FUNCTIONS_DIR)" ]; then \
-          cp $^ $(DESTDIR)$(ZSH_SITE_FUNCTIONS_DIR);                \
+	-if [ -n "$(ZSH_SITE_FUNCTIONS_DIR)" ]; then                \
+          cp $^ $(DESTDIR)$(ZSH_SITE_FUNCTIONS_DIR)  2> /dev/null;  \
+	  true;                                                     \
         fi
 
-makefile: $(PATH_TO_SRC)/Makefile.in config.status
+makefile: $(PATH_TO_SRC)/Makefile.in ./config.status
 	./config.status $@
 
 config.status:
@@ -205,7 +227,7 @@ _distContrib:
 	cp -r $(CONTRIB) $(DistD)/contrib
 
 _distSrc:
-	mkdir $(DistD)/src $(DistD)/tools $(DistD)/settarg $(DistD)/shells
+	mkdir $(DistD)/src $(DistD)/tools $(DistD)/settarg $(DistD)/shells 
 	cp $(lua_code) $(ComputeHashSum) $(STANDALONE_PRGM) $(DistD)/src
 	cp tools/*.lua $(DistD)/tools
 	cp $(SETTARG_SOURCE) $(DistD)/settarg
@@ -247,15 +269,19 @@ _distTar:
 test:
 	cd rt; unset TMFuncPATH; tm .
 
-tags:
+tags: build_tags
+	$(RM) file_list.*
+
+build_tags:
 	find . \( -regex '.*~$$\|.*/\.git\|.*/\.git/' -prune \)  \
                -o -type f > file_list.1
 	sed -e 's|.*/.git.*||g'                                  \
             -e 's|.*/rt/.*/t1/.*||g'                             \
+            -e 's|.*/html/.*$$||g'                               \
             -e 's|./TAGS||g'                                     \
             -e 's|./makefile||g'                                 \
             -e 's|./configure$$||g'                              \
-            -e 's|/.DS_Store$$||g'                               \
+            -e 's|.*\.DS_Store$$||g'                             \
             -e 's|.*\.tgz$$||g'                                  \
             -e 's|.*\.tar\.gz$$||g'                              \
             -e 's|.*\.tar\.bz2$$||g'                             \
@@ -269,9 +295,11 @@ tags:
 	    -e 's|.*\.snm$$||g'                                  \
 	    -e 's|.*\.toc$$||g'                                  \
 	    -e 's|.*\.vrb$$||g'                                  \
+	    -e 's|.*\.key$$||g'                                  \
             -e 's|^#.*||g'                                       \
-            -e 's|/#.*||g'                                       \
+            -e 's|.*/#.*||g'                                     \
             -e 's|\.#.*||g'                                      \
+            -e 's|.*/\.#.*||g'                                   \
             -e 's|.*\.pdf$$||g'                                  \
             -e 's|.*\.used$$||g'                                 \
             -e 's|./.*\.log$$||g'                                \
@@ -282,7 +310,6 @@ tags:
             -e '/^\s*$$/d'                                       \
 	       < file_list.1 > file_list.2
 	etags  `cat file_list.2`
-	$(RM) file_list.*
 
 
 libexec:  $(lua_code)
@@ -302,7 +329,7 @@ Inst_Lmod_MF: $(LMOD_MF_SOURCE)
 	$(MAKE) FILELIST="$^" DIRLOC=$(DESTDIR)$(LMOD_MF) __installMe
 
 clean:
-	$(RM) config.log
+	$(RM) config.log *.o
 	cd $(PATH_TO_SRC)/pkgs; $(MAKE) LIB=$(DESTDIR)$(LIB) SHARE=$(DESTDIR)$(LIBEXEC) clean
 
 clobber: clean
@@ -334,7 +361,12 @@ gittag:
 	    echo "--module('Version')"                            >  $(VERSION_SRC); \
 	    echo 'local M={}'                                     >> $(VERSION_SRC); \
 	    echo 'function M.tag()  return "$(TAG)"   end'        >> $(VERSION_SRC); \
-	    echo 'function M.git()  return "@git@"    end'        >> $(VERSION_SRC); \
+	    echo 'function M.git()'                               >> $(VERSION_SRC); \
+            echo '   local s = "@git@"'                           >> $(VERSION_SRC); \
+            echo '   if (s == "@" .. "git@")     then s = "" end' >> $(VERSION_SRC); \
+            echo '   if (s == "("..M.tag()..")") then s = "" end' >> $(VERSION_SRC); \
+            echo '   return s'                                    >> $(VERSION_SRC); \
+            echo 'end'                                            >> $(VERSION_SRC); \
 	    echo 'function M.date() return "$(VDATE)" end'        >> $(VERSION_SRC); \
 	    echo 'function M.name()'                              >> $(VERSION_SRC); \
             echo '  local a = {}'                                 >> $(VERSION_SRC); \

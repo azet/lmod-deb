@@ -1,3 +1,8 @@
+--- This handle banners used in Lmod.
+-- @classmod Banner
+
+require("strict")
+
 --------------------------------------------------------------------------
 -- Lmod License
 --------------------------------------------------------------------------
@@ -32,13 +37,6 @@
 --
 --------------------------------------------------------------------------
 
-
---------------------------------------------------------------------------
--- Banner: Control the banner and border functions:
---------------------------------------------------------------------------
-
-
-require("strict")
 require("TermWidth")
 local M         = {}
 local concatTbl = table.concat
@@ -48,7 +46,6 @@ local max       = math.max
 local rep       = string.rep
 
 local s_bannerT = false
-
 
 local function new(self)
    local o = {}
@@ -60,6 +57,8 @@ local function new(self)
    return o
 end
 
+--- The singleton ctor for the class.
+-- @param self Banner object.
 
 function M.banner(self)
    if (not s_bannerT) then
@@ -69,10 +68,19 @@ function M.banner(self)
    return s_bannerT
 end
 
+--------------------------------------------------------------------------
+-- Access function return the current terminal width.
+-- @param self Banner object
+-- @return the current termwidth
+
 function M.width(self)
    return self.__termwidth
 end
 
+--------------------------------------------------------------------------
+-- Member function to register a number spaces between term width and banner.
+-- @param self Banner object
+-- @param nspaces the number of spaces to the left of the banner.
 function M.border(self, nspaces)
    if (not self.__borderG or nspaces ~= self.__nspacesG) then
       self.__nspacesG = nspaces
@@ -86,6 +94,10 @@ function M.border(self, nspaces)
    return self.__borderG
 end
 
+--------------------------------------------------------------------------
+-- Member function to output the banner itself with str in the middle.
+-- @param self Banner object
+-- @param str input string.
 function M.bannerStr(self, str)
    local a       = {}
    local myWidth = self:width()
@@ -100,4 +112,5 @@ function M.bannerStr(self, str)
    return concatTbl(a,"")
 end
 
+---- finis -----
 return M

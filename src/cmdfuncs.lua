@@ -1,4 +1,9 @@
 --------------------------------------------------------------------------
+-- The all the user commands are implemented here.
+-- @module cmdfuncs
+
+require("strict")
+--------------------------------------------------------------------------
 -- Lmod License
 --------------------------------------------------------------------------
 --
@@ -32,14 +37,8 @@
 --
 --------------------------------------------------------------------------
 
--------------------------------------------------------------------------
--- The command functions: The all the user commands are implemented here.
--------------------------------------------------------------------------
-
-require("strict")
 require("myGlobals")
 require("string_utils")
-require("escape")
 require("TermWidth")
 require("fileOps")
 require("utils")
@@ -65,6 +64,7 @@ local unpack       = unpack or table.unpack
 
 local function Access(mode, ...)
    local master    = Master:master()
+   local shell     = master.shell
    local masterTbl = masterTbl()
    dbg.start{"Access(", concatTbl({...},", "),")"}
    mcp = MasterControl.build("access", mode)
@@ -72,8 +72,7 @@ local function Access(mode, ...)
 
    local n = select('#',...)
    if (n < 1) then
-      pcall(pager, io.stderr, masterTbl.cmdHelpMsg, "\n", Usage(), "\n",
-            version())
+      shell:echo(masterTbl.cmdHelpMsg, "\n", Usage(), "\n", version())
       dbg.fini("Access")
       return
    end
@@ -126,7 +125,8 @@ function GetDefault(a)
    a          = a or "default"
    dbg.start{"GetDefault(",a,")"}
 
-   local path = pathJoin(os.getenv("HOME"), ".lmod.d", a)
+   local sname = (LMOD_SYSTEM_NAME == nil) and "" or "." .. LMOD_SYSTEM_NAME 
+   local path = pathJoin(os.getenv("HOME"), ".lmod.d", a .. sname)
    local mt   = MT:mt()
    mt:getMTfromFile{fn=path, name=a}
    dbg.fini("GetDefault")
@@ -142,8 +142,11 @@ function Help(...)
       local twidth    = TermWidth()
       local middleStr = "Module Specific Help for \"" .. ModuleName .. "\""
       local title     = banner:bannerStr(middleStr)
-      io.stderr:write("\n")
-      io.stderr:write(title, "\n")
+      local a         = {}
+      a[#a+1]         = "\n"
+      a[#a+1]         = title
+      a[#a+1]         = "\n"
+      return concatTbl(a,"")
    end
 
    Access("help",...)
@@ -158,6 +161,7 @@ function Keyword(...)
    dbg.start{"Keyword(",concatTbl({...},","),")"}
 
    local master  = Master:master()
+   local shell   = master.shell
    local cache   = Cache:cache()
    local moduleT = cache:build()
    local s
@@ -178,7 +182,8 @@ function Keyword(...)
    ia = ia+1; a[ia] = "\n"
 
    spider:Level0Helper(dbT,a)
-   pcall(pager,io.stderr,concatTbl(a,""))
+   
+   shell:echo(concatTbl(a,""))
 
    dbg.fini("Keyword")
 end
@@ -190,6 +195,7 @@ end
 function List(...)
    dbg.start{"List(...)"}
    local masterTbl = masterTbl()
+   local shell     = Master:master().shell
    local mt = MT:mt()
    local totalA = mt:list("userName","any")
    if (#totalA < 1) then
@@ -203,6 +209,7 @@ function List(...)
    local msg     = "Currently Loaded Modules"
    local activeA = mt:list("short","active")
    local a       = {}
+   local b       = {}
    local msg2    = ":"
 
    if (wanted.n == 0) then
@@ -212,7 +219,7 @@ function List(...)
       msg2 = " Matching: " .. table.concat(wanted," or ")
       if (not masterTbl.regexp) then
          for i = 1, wanted.n do
-            wanted[i] = caseIndependent(wanted[i])
+            wanted[i] = wanted[i]:caseIndependent()
          end
       end
    end
@@ -233,7 +240,11 @@ function List(...)
       return
    end
 
-   io.stderr:write("\n",msg,msg2,"\n")
+   b[#b+1] = "\n"
+   b[#b+1] = msg
+   b[#b+1] = msg2
+   b[#b+1] = "\n"
+
    local kk = 0
    local legendT = {}
    for i = 1, #activeA do
@@ -250,21 +261,23 @@ function List(...)
    end
 
    if (kk == 0) then
-      io.stderr:write("  None found.\n")
+      b[#b+1] = "  None found.\n"
    else
       local ct = ColumnTable:new{tbl=a, gap=0, len=length}
-      io.stderr:write(ct:build_tbl(),"\n")
+      b[#b+1] = ct:build_tbl()
+      b[#b+1] = "\n"
    end
 
    if (next(legendT)) then
       local term_width = TermWidth()
-      io.stderr:write("\n  Where:\n")
+      b[#b+1] = "\n  Where:\n"
       a = {}
       for k, v in pairsByKeys(legendT) do
          a[#a+1] = { "   " .. k ..":", v}
       end
       local bt = BeautifulTbl:new{tbl=a, column = term_width-1}
-      io.stderr:write(bt:build_tbl(),"\n")
+      b[#b+1] = bt:build_tbl()
+      b[#b+1] = "\n"
    end
    a = {}
    kk = 0
@@ -284,17 +297,20 @@ function List(...)
    end
 
    if (#a > 0) then
-      io.stderr:write("\nInactive Modules",msg2,"\n")
+      b[#b+1] = "\nInactive Modules"
+      b[#b+1] = msg2
+      b[#b+1] = "\n"
       local ct = ColumnTable:new{tbl=a,gap=0}
-      io.stderr:write(ct:build_tbl(),"\n")
+      b[#b+1] = ct:build_tbl()
+      b[#b+1] = "\n"
    end
 
    local aa = {}
    aa = hook.apply("msgHook","list",aa)
    if (#aa > 0) then
-      io.stderr:write(concatTbl(aa,""))
+      b[#b+1] = concatTbl(aa,"")
    end
-
+   shell:echo(concatTbl(b,""))
    dbg.fini("List")
 end
 
@@ -355,7 +371,9 @@ function Load_Usr(...)
 
    local b
    if (#lA > 0) then
-      if (varTbl[ModulePath] == nil or varTbl[ModulePath]:expand() == "") then
+      if (varTbl[ModulePath] == nil or
+             varTbl[ModulePath]:expand() == false or
+             varTbl[ModulePath]:expand() == "" ) then
          LmodWarning("MODULEPATH is undefined\n")
       end
 
@@ -363,6 +381,9 @@ function Load_Usr(...)
       mcp           = MCP
       dbg.print{"Setting mcp to ", mcp:name(),"\n"}
       b             = mcp:load_usr(lA)
+      if (haveWarnings()) then
+         mcp.mustLoad()
+      end
       mcp           = mcp_old
    end
 
@@ -448,7 +469,8 @@ end
 
 function Reset(msg)
    dbg.start{"Reset()"}
-   Purge()
+   local force = true
+   Purge(force)
    local default = os.getenv("LMOD_SYSTEM_DEFAULT_MODULES") or ""
    dbg.print{"default: \"",default,"\"\n"}
 
@@ -457,7 +479,7 @@ function Reset(msg)
    default = default:gsub(" +",":")
 
    if (msg ~= false) then
-      io.stderr:write("Restoring modules to system default\n")
+      io.stderr:write("Resetting modules to system default\n")
    end
 
    if (default == "") then
@@ -489,23 +511,28 @@ function Restore(a)
 
    local msg
    local path
+   local myName  = "default"
    local sname   = LMOD_SYSTEM_NAME
    local msgTail = ""
    if (sname == nil) then
       sname   = ""
+      myName  = "(empty)"
    else
       msgTail = ", for system: \"".. sname .. "\""
       sname   = "." .. sname
    end
 
-
    if (a == nil) then
       path = pathJoin(os.getenv("HOME"), ".lmod.d", "default" .. sname)
       if (not isFile(path)) then
          a = "system"
+         myName = a 
+      else
+         myName = "default"
       end
    elseif (a ~= "system") then
-      path = pathJoin(os.getenv("HOME"), ".lmod.d", a .. sname)
+      myName = sname
+      path   = pathJoin(os.getenv("HOME"), ".lmod.d", a .. sname)
       if (not isFile(path)) then
          LmodError(" User module collection: \"",a,"\" does not exist.\n",
                    " Try \"module savelist\" for possible choices.\n")
@@ -521,16 +548,15 @@ function Restore(a)
       msg = "user's ".. a .. msgTail
    end
 
-   if (masterTbl.initial) then
+   if (masterTbl.quiet or masterTbl.initial) then
       msg = false
    end
-
 
    if (a == "system" ) then
       Reset(msg)
    else
       local mt      = MT:mt()
-      local results = mt:getMTfromFile{fn=path, name=a, msg=msg} or Reset(true)
+      local results = mt:getMTfromFile{fn=path, name=myName, msg=msg} or Reset(msg)
    end
 
    dbg.fini("Restore")
@@ -615,6 +641,7 @@ function SaveList(...)
    local masterTbl = masterTbl()
    local a         = {}
    local b         = {}
+   local shell     = Master:master().shell
 
    findNamedCollections(b,path)
    if (masterTbl.terse) then
@@ -640,10 +667,13 @@ function SaveList(...)
       a[#a+1] = cstr .. name
    end
 
+   local b = {}
    if (#a > 0) then
-      io.stderr:write("Named collection list:\n")
+      b[#b+1]  = "Named collection list:\n"
       local ct = ColumnTable:new{tbl=a,gap=0}
-      io.stderr:write(ct:build_tbl(),"\n")
+      b[#b+1]  = ct:build_tbl()
+      b[#b+1]  = "\n"
+      shell:echo(concatTbl(b,""))
    else
       io.stderr:write("No Named collections.\n")
    end
@@ -676,9 +706,13 @@ function Show(...)
    local borderStr = banner:border(0)
 
    prtHdr       = function()
-                     io.stderr:write(borderStr)
-                     io.stderr:write("   ",ModuleFn,":\n")
-                     io.stderr:write(borderStr)
+                     local a = {}  
+                     a[#a+1] = borderStr
+                     a[#a+1] = "   "
+                     a[#a+1] = ModuleFn
+                     a[#a+1] = ":\n"
+                     a[#a+1] = borderStr
+                     return concatTbl(a,"")
                   end
    master:access(...)
    dbg.fini("Show")
@@ -692,9 +726,10 @@ end
 function SpiderCmd(...)
    dbg.start{"SpiderCmd(", concatTbl({...},", "),")"}
    local cache     = Cache:cache()
+   local shell     = Master:master().shell
    local moduleT   = cache:build()
    local masterTbl = masterTbl()
-   local dbT     = {}
+   local dbT       = {}
    local s
    local srch
    local spider    = Spider:new()
@@ -711,13 +746,18 @@ function SpiderCmd(...)
          a[#a+1] = spider:spiderSearch(dbT, arg[i], help)
       end
       a[#a+1] = spider:spiderSearch(dbT, arg[arg.n], true)
-      s = concatTbl(a,"\n")
+      s = concatTbl(a,"")
    end
-   local a = {}
-   a[#a+1] = s
-   a = hook.apply("msgHook","spider",a)
 
-   pcall(pager,io.stderr, concatTbl(a,""), "\n")
+   if (masterTbl.terse) then
+      io.stderr:write(s,"\n")
+   else
+      local a = {}
+      a[#a+1] = s
+      a = hook.apply("msgHook","spider",a)
+      s = concatTbl(a,"")
+      shell:echo(s)
+   end
    dbg.fini("SpiderCmd")
 end
 
@@ -737,7 +777,7 @@ function Swap(...)
 
    local n = select("#", ...)
    if (n ~= 2) then
-      LmodError("Wrong number of arguments to swap.\n")
+      b = a
    end
 
    local mt    = MT:mt()
@@ -876,6 +916,6 @@ end
 --  Whatis(): Run whatis on all request modules given the the command line.
 
 function Whatis(...)
-   prtHdr    = dbg.quiet
+   prtHdr    = function () return "" end
    Access("whatis",...)
 end

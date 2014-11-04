@@ -1,4 +1,15 @@
 --------------------------------------------------------------------------
+-- Find the module matches the version requested by the user.
+--
+--    1. It tries to see if the module is a full version request.
+--    2. If not it tries to find the default.
+--    3. Finally, it looks for the latest.
+--
+-- @classmod MN_Match
+
+require("strict")
+
+--------------------------------------------------------------------------
 -- Lmod License
 --------------------------------------------------------------------------
 --
@@ -32,7 +43,6 @@
 --
 --------------------------------------------------------------------------
 
-require("strict")
 
 local M        = inheritsFrom(MName)
 M.my_name      = "match"
@@ -44,6 +54,8 @@ local s_steps = {
    MName.find_latest,
 }
 
+--------------------------------------------------------------------------
+-- Return the steps used in the Match class.
 function M.steps()
    return s_steps
 end

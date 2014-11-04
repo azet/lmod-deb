@@ -1,4 +1,10 @@
 --------------------------------------------------------------------------
+-- This the base class for Module file output.
+-- @classmod MF_Base
+
+require("strict")
+
+--------------------------------------------------------------------------
 -- Lmod License
 --------------------------------------------------------------------------
 --
@@ -32,13 +38,8 @@
 --
 --------------------------------------------------------------------------
 
---------------------------------------------------------------------------
--- MF_Base:  This the base class for Module file output.
-
-require("strict")
 require("inherits")
 require("string_utils")
-require("quote")
 
 local M            = {}
 
@@ -48,22 +49,17 @@ local pairsByKeys  = pairsByKeys
 
 
 --------------------------------------------------------------------------
--- Member functions:
---------------------------------------------------------------------------
-
---------------------------------------------------------------------------
--- MF_Base:name(): returns the derived class's name: (e.g. bash)
-
+-- returns the derived class's name: (e.g. bash)
+-- @param self MF_Base object
 function M.name(self)
    return self.my_name
 end
 
-
 s_mfT = false
 
 --------------------------------------------------------------------------
--- MF_Base:build():  This is the factory that builds the derived shell.
-
+-- This is the factory that builds the derived shell.
+-- @param kind the kind of derived MF_Base class to build.
 function M.build(kind)
    if (not s_mfT) then
       local MF_Lua  = require("MF_Lua")
@@ -78,15 +74,23 @@ function M.build(kind)
    return mkind:create()
 end
 
+--------------------------------------------------------------------------
+-- Compare the old env table with the new and generate differences.
+-- @param self MF_Base object
+-- @param ignoreT table of env. vars to ignore.
+-- @param oldEnvT The original user environment.
+-- @param envT The new user environment.
 function M.process(self, ignoreT, oldEnvT, envT)
    dbg.start{"MF_Base:process(ignoreT, oldEnvT, envT)"}
    local a = {}
 
    dbg.print{"name: ",self:name(), "\n"}
 
+   local mt_pat = "^_ModuleTable"
    for k, v in pairsByKeys(envT) do
       dbg.print{"k: ", k, ", v: ", v, ", oldV: ",oldEnvT[k],"\n"}
-      if (not ignoreT[k]) then
+      local i = k:find(mt_pat)
+      if (not ignoreT[k] and not i) then
          local oldV = oldEnvT[k]
          if (not oldV) then
             a[#a+1] = self:setenv(k,v)

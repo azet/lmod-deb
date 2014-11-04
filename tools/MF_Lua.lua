@@ -1,4 +1,11 @@
 --------------------------------------------------------------------------
+-- This is a derived class from MF_Base.  This classes knows how
+-- to expand the environment variables into Lua syntax.
+-- @classmod MF_Lua
+
+require("strict")
+
+--------------------------------------------------------------------------
 -- Lmod License
 --------------------------------------------------------------------------
 --
@@ -32,12 +39,6 @@
 --
 --------------------------------------------------------------------------
 
---------------------------------------------------------------------------
--- MF_Lmod: This is a derived class from MF_Base.  This classes knows how
---          to expand the environment variables into Lua syntax.
-
-
-require("strict")
 
 
 local MF_Lmod     = inheritsFrom(MF_Base)
@@ -46,27 +47,32 @@ local concatTbl   = table.concat
 MF_Lmod.my_name   = "Lmod"
 
 --------------------------------------------------------------------------
--- MF_Lmod:setenv(): generate string for setenv write in Lua.
-
+-- generate string for setenv write in Lua.
+-- @param self MF_Lua object
+-- @param k key
+-- @param v value
 function MF_Lmod.setenv(self, k, v)
-   v = doubleQuoteEscaped(v)
-   return "setenv(\"" .. k .. "\",\"" .. v .. "\")"
+   return "setenv(" .. k:doubleQuoteString() .. "," .. v:doubleQuoteString() .. ")"
 end
 
 --------------------------------------------------------------------------
--- MF_Lmod:prepend_path(): generate string for prepend_path write in Lua.
+-- generate string for prepend_path write in Lua.
+-- @param self MF_Lua object
+-- @param k key
+-- @param v value
 
 function MF_Lmod.prepend_path(self, k, v)
-   v = doubleQuoteEscaped(v)
-   return "prepend_path(\"" .. k .. "\",\"" .. v .. "\")"
+   return "prepend_path(" .. k:doubleQuoteString() .. "," .. v:doubleQuoteString() .. ")"
 end
 
 --------------------------------------------------------------------------
--- MF_Lmod:append_path(): generate string for prepend_path write in Lua.
+-- generate string for append_path write in Lua.
+-- @param self MF_Lua object
+-- @param k key
+-- @param v value
 
 function MF_Lmod.append_path(self, k, v)
-   v = doubleQuoteEscaped(v)
-   return "append_path(\"" .. k .. "\",\"" .. v .. "\")"
+   return "append_path(" .. k:doubleQuoteString() .. "," .. v:doubleQuoteString() .. ")"
 end
 
 return MF_Lmod

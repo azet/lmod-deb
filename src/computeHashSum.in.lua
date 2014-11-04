@@ -1,5 +1,10 @@
 #!@path_to_lua@/lua
 -- -*- lua -*-
+
+--------------------------------------------------------------------------
+-- Fixme
+-- @script computeHashSum 
+
 --------------------------------------------------------------------------
 -- Lmod License
 --------------------------------------------------------------------------
@@ -55,8 +60,8 @@ end
 Version = "1.0"
 HashSum = "@path_to_hashsum@"
 
-require("myGlobals")
 require("strict")
+require("myGlobals")
 require("utils")
 
 require("fileOps")
@@ -128,8 +133,8 @@ function main()
    mStack:push(masterTbl.fullName, masterTbl.usrName, masterTbl.sn, f)
    loadModuleFile{file=f, shell=shellN, reportErr=true}
    mStack:pop()
-   local s = concatTbl(ComputeModuleResultsA,"")
-   dbg.textA{name="Text to Hash",a=ComputeModuleResultsA}
+   local s = concatTbl(ShowResultsA,"")
+   dbg.textA{name="Text to Hash",a=ShowResultsA}
 
    if (masterTbl.verbose) then
       io.stderr:write(s)

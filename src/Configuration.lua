@@ -1,4 +1,10 @@
 --------------------------------------------------------------------------
+-- Report how a site has configured Lmod.
+-- @classmod Configuration
+
+require("strict")
+
+--------------------------------------------------------------------------
 -- Lmod License
 --------------------------------------------------------------------------
 --
@@ -32,7 +38,6 @@
 --
 --------------------------------------------------------------------------
 
-require("strict")
 
 require("capture")
 require("fileOps")
@@ -40,6 +45,7 @@ require("pairsByKeys")
 require("serializeTbl")
 require("utils")
 require("string_utils")
+require("colorize")
 local BeautifulTbl = require('BeautifulTbl')
 local Version      = require("Version")
 local concatTbl    = table.concat
@@ -74,7 +80,8 @@ local function new(self)
 
    if (locSitePkg ~= "unknown") then
 
-      local std_sha1 = "15fea255d00cc957ce2431cfe3a888349a8bb4ef"
+
+      local std_sha1 = "038082232d235d9f9278975749eafe791a206a87"
 
       local HashSum = "@path_to_hashsum@"
       if (HashSum:sub(1,1) == "@") then
@@ -94,45 +101,54 @@ local function new(self)
    else
       lmod_version = lmod_version:gsub("[)(]","")
    end
-   local settarg_support = "@lmod_full_settarg_support@"
-   local pkgName         = Pkg.name() or "unknown"
-   local lmod_colorize   = getenv("LMOD_COLORIZE") or "@colorize@"
-   local scDescriptT     = getSCDescriptT()
-   local numSC           = #scDescriptT
-   local uname           = capture("uname -a")
+   local settarg_support   = "@lmod_full_settarg_support@"
+   local pkgName           = Pkg.name() or "unknown"
+   local lmod_colorize     = getenv("LMOD_COLORIZE") or "@colorize@"
+   local scDescriptT       = getSCDescriptT()
+   local numSC             = #scDescriptT
+   local uname             = capture("uname -a")
    local adminFn, readable = findAdminFn()
+   local activeTerm        = haveTermSupport() and "true" or colorize("red","false")
+   local case_ind_sorting  = LMOD_CASE_INDEPENDENT_SORTING
 
    local tbl = {}
-   tbl.prefix     = { doc = "Lmod prefix"                     , value = "@PREFIX@",                    }
-   tbl.dupPaths   = { doc = "Allow duplicate paths"           , value = LMOD_DUPLICATE_PATHS,          }
-   tbl.path_lua   = { doc = "Path to Lua"                     , value = "@path_to_lua@",               }
-   tbl.path_pager = { doc = "Path to Pager"                   , value = "@path_to_pager@",             }
-   tbl.path_hash  = { doc = "Path to HashSum"                 , value = "@path_to_hashsum@",           }
-   tbl.settarg    = { doc = "Supporting Full Settarg Use"     , value = settarg_support,               }
-   tbl.dot_files  = { doc = "Using dotfiles"                  , value = "@use_dot_files@",             }
-   tbl.numSC      = { doc = "number of cache dirs"            , value = numSC,                         }
-   tbl.lmodV      = { doc = "Lmod version"                    , value = lmod_version,                  }
-   tbl.ancient    = { doc = "User cache valid time(sec)"      , value = "@ancient@",                   }
-   tbl.short_tm   = { doc = "Write cache after (sec)"         , value = "@short_time@",                }
-   tbl.prpnd_blk  = { doc = "Prepend order"                   , value = "@prepend_block@",             }
-   tbl.colorize   = { doc = "Colorize Lmod"                   , value = lmod_colorize,                 }
-   tbl.allowTCL   = { doc = "Allow TCL modulefiles"           , value = LMOD_ALLOW_TCL_MFILES,         }
-   tbl.mpath_av   = { doc = "Include modulepath dir in avail" , value = LMOD_MPATH_AVAIL,              }
-   tbl.mpath_root = { doc = "MODULEPATH_ROOT"                 , value = "@modulepath_root@",           }
-   tbl.pkg        = { doc = "Pkg Class name"                  , value = pkgName,                       }
-   tbl.sitePkg    = { doc = "Site Pkg location"               , value = locSitePkg,                    }
-   tbl.lua_term   = { doc = "System lua-term"                 , value = "@have_lua_term@",             }
-   tbl.lua_json   = { doc = "System lua_json"                 , value = "@have_lua_json@",             }
-   tbl.uname      = { doc = "uname -a"                        , value = uname,                         }
-   tbl.z01_admin  = { doc = "Admin file"                      , value = adminFn,                       }
-   tbl.z02_admin  = { doc = "Does Admin file exist"           , value = tostring(readable),            }
-   tbl.luaV       = { doc = "Lua Version"                     , value = _VERSION,                      }       
-   tbl.case       = { doc = "Case Independent Sorting"        , value = LMOD_CASE_INDEPENDENT_SORTING, }
+   tbl.prefix     = { k = "Lmod prefix"                   , v = "@PREFIX@",             }
+   tbl.dupPaths   = { k = "Allow duplicate paths"         , v = LMOD_DUPLICATE_PATHS,   }
+   tbl.path_lua   = { k = "Path to Lua"                   , v = "@path_to_lua@",        }
+   tbl.path_pager = { k = "Path to Pager"                 , v = "@path_to_pager@",      }
+   tbl.path_hash  = { k = "Path to HashSum"               , v = "@path_to_hashsum@",    }
+   tbl.settarg    = { k = "Supporting Full Settarg Use"   , v = settarg_support,        }
+   tbl.dot_files  = { k = "Using dotfiles"                , v = "@use_dot_files@",      }
+   tbl.numSC      = { k = "number of cache dirs"          , v = numSC,                  }
+   tbl.lmodV      = { k = "Lmod version"                  , v = lmod_version,           }
+   tbl.autoSwap   = { k = "Auto swapping"                 , v = "@auto_swap@",          }
+   tbl.expMCmd    = { k = "Export the module command"     , v = "@export_module@",      }
+   tbl.ancient    = { k = "User cache valid time(sec)"    , v = "@ancient@",            }
+   tbl.short_tm   = { k = "Write cache after (sec)"       , v = "@short_time@",         }
+   tbl.prpnd_blk  = { k = "Prepend order"                 , v = "@prepend_block@",      }
+   tbl.colorize   = { k = "Colorize Lmod"                 , v = lmod_colorize,          }
+   tbl.allowTCL   = { k = "Allow TCL modulefiles"         , v = LMOD_ALLOW_TCL_MFILES,  }
+   tbl.mpath_av   = { k = "avail: Include modulepath dir" , v = LMOD_MPATH_AVAIL,       }
+   tbl.mpath_root = { k = "MODULEPATH_ROOT"               , v = "@modulepath_root@",    }
+   tbl.pkg        = { k = "Pkg Class name"                , v = pkgName,                }
+   tbl.sitePkg    = { k = "Site Pkg location"             , v = locSitePkg,             }
+   tbl.lua_term   = { k = "System lua-term"               , v = "@have_lua_term@",      }
+   tbl.lua_json   = { k = "System lua_json"               , v = "@have_lua_json@",      }
+   tbl.lua_term_A = { k = "Active lua-term"               , v = activeTerm,             }
+   tbl.uname      = { k = "uname -a"                      , v = uname,                  }
+   tbl.z01_admin  = { k = "Admin file"                    , v = adminFn,                }
+   tbl.z02_admin  = { k = "Does Admin file exist"         , v = tostring(readable),     }
+   tbl.luaV       = { k = "Lua Version"                   , v = _VERSION,               }
+   tbl.case       = { k = "Case Independent Sorting"      , v = case_ind_sorting,       }
 
    o.tbl = tbl
    return o
 end
 
+--------------------------------------------------------------------------
+-- A Configuration Singleton Ctor.
+-- @param self A Configuration object.
+-- @return A Configuration Singleton.
 function M.configuration(self)
    if (not s_configuration) then
       s_configuration = new(self)
@@ -140,6 +156,10 @@ function M.configuration(self)
    return s_configuration
 end
 
+--------------------------------------------------------------------------
+-- Report the current configuration.
+-- @param self A Configuration object
+-- @return the configuration report as a single string.
 function M.report(self)
    local a   = {}
    local tbl = self.tbl
@@ -147,7 +167,7 @@ function M.report(self)
    a[#a+1]   = {"-----------", "-----", }
 
    for k, v in pairsByKeys(tbl) do
-      a[#a+1] = {v.doc, v.value }
+      a[#a+1] = {v.k, v.v }
    end
 
    local b = {}

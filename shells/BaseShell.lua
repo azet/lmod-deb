@@ -39,7 +39,7 @@ require("strict")
 require("inherits")
 require("serializeTbl")
 require("string_utils")
-require("quote")
+require("utils")
 local M            = {}
 
 local dbg          = require("Dbg"):dbg()
@@ -53,6 +53,7 @@ local format       = string.format
 local getenv       = os.getenv
 local huge         = math.huge
 local min          = math.min
+local pack         = (_VERSION == "Lua 5.1") and argsPack   or table.pack
 local pairsByKeys  = pairsByKeys
 
 
@@ -113,7 +114,7 @@ function M.expand(self, tbl)
          self:alias(k,vstr)
       elseif (vType == "shell_function") then
          self:shellFunc(k,vstr)
-      elseif (vstr == "") then
+      elseif (not vstr) then
          self:unset(k, vType)
       elseif (k == "_ModuleTable_") then
          self:expandMT(vstr)
@@ -174,7 +175,27 @@ function M.expandMT(self, vstr)
 end
 
 
+function M.echo(self, ...)
+   if (LMOD_REDIRECT == "no") then
+      pcall(pager,io.stderr,...)
+   else
+      local arg = pack(...)
+      for i = 1, arg.n do
+         local whole=arg[i]
+         for line in whole:split("\n") do
+            line = line:gsub("'","'\"'\"'"):gsub(" ","' '")
+            io.stdout:write("echo '",line,"';\n")
+         end
+      end
+   end
+end
 
+function M._echo(self, ...)
+   local arg = pack(...)
+   for i = 1, arg.n do
+      io.stderr:write(arg[i])
+   end
+end
 
 --------------------------------------------------------------------------
 -- valid_shell:  returns the valid shell name if it is in the shellTbl or

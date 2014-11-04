@@ -1,4 +1,9 @@
 --------------------------------------------------------------------------
+-- Fixme
+-- @module myGlobals
+
+require("strict")
+--------------------------------------------------------------------------
 -- Lmod License
 --------------------------------------------------------------------------
 --
@@ -33,11 +38,29 @@
 --------------------------------------------------------------------------
 
 require("fileOps")
-local getenv = os.getenv
+local posix        = require("posix")
+local getenv       = os.getenv
+local setenv_posix = posix.setenv
+
+local function initialize(lmod_name, sed_name)
+   local value = (getenv(lmod_name) or sed_name):lower()
+   if (value:sub(1,1) == "@") then
+      value = "no"
+   end
+   return value
+end
+
 
 ------------------------------------------------------------------------
 -- The global variables for Lmod:
 ------------------------------------------------------------------------
+
+
+------------------------------------------------------------------------
+-- Internally Lmod uses LC_ALL -> "C" so that the user environment won't
+-- break things.
+------------------------------------------------------------------------
+setenv_posix("LC_ALL","C",true)
 
 ------------------------------------------------------------------------
 -- ModulePath: The name of the environment variable which contains the
@@ -84,6 +107,11 @@ LMOD_CASE_INDEPENDENT_SORTING = getenv("LMOD_CASE_INDEPENDENT_SORTING") or
                                 "@case_independent_sorting@"
 
 ------------------------------------------------------------------------
+-- LMOD_REDIRECT:  Send messages to stdout instead of stderr
+------------------------------------------------------------------------
+LMOD_REDIRECT = initialize("LMOD_REDIRECT", "@redirect@")
+
+------------------------------------------------------------------------
 -- LMOD_SYSTEM_NAME:  When on a shared file system, use this to
 --                    form the cache name and collection names.       
 ------------------------------------------------------------------------
@@ -91,14 +119,16 @@ LMOD_CASE_INDEPENDENT_SORTING = getenv("LMOD_CASE_INDEPENDENT_SORTING") or
 LMOD_SYSTEM_NAME = getenv("LMOD_SYSTEM_NAME")
 
 ------------------------------------------------------------------------
+-- LMOD_AUTO_SWAP:  Swap instead of Error 
+------------------------------------------------------------------------
+
+LMOD_AUTO_SWAP   = initialize("LMOD_AUTO_SWAP","@auto_swap@")
+
+------------------------------------------------------------------------
 -- LMOD_AVAIL_MPATH:  Include MODULEPATH in avail search
 ------------------------------------------------------------------------
 
-LMOD_MPATH_AVAIL = (getenv("LMOD_MPATH_AVAIL") or
-                       "@mpath_avail@"):lower()
-if (LMOD_MPATH_AVAIL:sub(1,1) == "@") then
-   LMOD_MPATH_AVAIL = "no"
-end
+LMOD_MPATH_AVAIL = initialize("LMOD_MPATH_AVAIL", "@mpath_avail@")
 
 ------------------------------------------------------------------------
 -- LMOD_ALLOW_TCL_MFILES:  Allow Lmod to read TCL based modules.
@@ -134,6 +164,20 @@ LMOD_PAGER = getenv("LMOD_PAGER")
 
 LMOD_RTM_TESTING = getenv("LMOD_RTM_TESTING")
 
+
+------------------------------------------------------------------------
+-- LMOD_AVAIL_STYLE: Used by the avail hook to control how avail output
+--                   is handled.   This is a colon separated list of
+--                   names.  Note that the default choice is marked by 
+--                   angle brackets:  A:B:<C> ==> C is the default.
+--                   If no angle brackets are specified then the first
+--                   entry is the default (i.e. A:B:C => A is default.
+------------------------------------------------------------------------
+
+LMOD_AVAIL_STYLE = getenv("LMOD_AVAIL_STYLE") or "<system>"
+if (LMOD_AVAIL_STYLE == "") then
+   LMOD_AVAIL_STYLE = "<system>"
+end
 
 ------------------------------------------------------------------------
 -- defaultMpathA: The array of paths that are hold the default
@@ -178,10 +222,10 @@ require("capture")
 adminT         = {}
 
 ------------------------------------------------------------------------
--- ComputeModuleResultsA: A place where the generated module file
---                        is written to when computing the sha1sum
+-- ShowResultsA: A place where the generated module file is written to
+--               when forming a show and computing a sha1sum
 ------------------------------------------------------------------------
-ComputeModuleResultsA = {}
+ShowResultsA = {}
 
 ------------------------------------------------------------------------
 -- colorize:  It is a colorizer when connected to a term and plain when not
@@ -307,6 +351,11 @@ accept_extT     = false
 -- allow dups function: allow for duplicate entries in PATH like vars.
 ------------------------------------------------------------------------
 allow_dups      = false
+
+------------------------------------------------------------------------
+-- When building the reverseMapT use the preloaded modules
+------------------------------------------------------------------------
+Use_Preload     = false
 
 
 PkgBase = false

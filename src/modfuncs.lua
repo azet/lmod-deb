@@ -1,4 +1,23 @@
 --------------------------------------------------------------------------
+-- All the functions that are "Lmod" functions are in
+-- this file.  Since the behavior of many of the Lmod functions (such as
+-- setenv) function when the user is doing a load, unload, show, many of
+-- these function they do the following:
+--
+--     a) They validate their arguments.
+--     b) mcp:<function>(...)
+--
+-- The variable mcp is the master control program object.  It gets
+-- constructed in the various modes Lmod gets run in.  The modes include
+-- load, unload, show, etc.  See MC_Load.lua and the other MC_*.lua files
+-- As well as the base class MasterControl.lua for more details.
+--
+-- See tools/Dbg.lua for details on how this debugging tool works.
+-- @module modfuncs
+
+require("strict")
+
+--------------------------------------------------------------------------
 -- Lmod License
 --------------------------------------------------------------------------
 --
@@ -32,26 +51,9 @@
 --
 --------------------------------------------------------------------------
 
---------------------------------------------------------------------------
--- modfuncs.lua:  All the functions that are "Lmod" functions are in
--- this file.  Since the behavior of many of the Lmod functions (such as
--- setenv) function when the user is doing a load, unload, show, many of
--- these function they do the following:
---
---     a) They validate their arguments.
---     b) mcp:<function>(...)
---
--- The variable mcp is the master control program object.  It gets
--- constructed in the various modes Lmod gets run in.  The modes include
--- load, unload, show, etc.  See MC_Load.lua and the other MC_*.lua files
--- As well as the base class MasterControl.lua for more details.
-
--- See src/tools/Dbg.lua for details on how this debugging tool works.
---------------------------------------------------------------------------
-
-require("strict")
 require("parseVersion")
 require("utils")
+require("string_utils")
 
 local dbg         = require("Dbg"):dbg()
 local max         = math.max
@@ -185,7 +187,8 @@ function load_module(...)
    dbg.start{"load_module(",concatTbl({...},", "),")"}
    if (not validateModules("load",...)) then return {} end
 
-   local b  = mcp:load_usr(MName:buildA("load",...))
+   dbg.print{"mcp:name(): ",mcp:name(),"\n"}
+   local b  = mcp:load_usr(MName:buildA(mcp:MNameType(),...))
    dbg.fini("load_module")
    return b
 end
@@ -296,10 +299,12 @@ end
 local function convert2table(...)
    local arg = pack(...)
    local t   = {}
-   if (arg.n == 1) then
+
+   if (arg.n == 1 and type(arg[1]) == "table" ) then
       t = arg[1]
+      t[1] = t[1]:trim()
    else
-      t[1]    = arg[1]
+      t[1]    = arg[1]:trim()
       t[2]    = arg[2]
       t.delim = arg[3]
    end
