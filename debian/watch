@@ -1,2 +1,0 @@
-version=2
-http://sf.net/lmod/lmod-src-(\d\S*)\.(?:zip|tgz|tbz|txz|(?:tar\.(?:gz|bz2|xz)))
