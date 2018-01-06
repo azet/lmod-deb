@@ -1,0 +1,98 @@
+-- -*- lua -*-
+testdescript = {
+   owner   = "rtm",
+   product = "modules",
+   description = [[
+	 Test initial module load
+   ]],
+   keywords = {"avail" },
+
+   active = 1,
+   testName = "avail",
+   job_submit_method = "INTERACTIVE",
+
+   runScript = [[
+
+     . $(projectDir)/rt/common_funcs.sh
+     unsetMT
+     initStdEnvVars
+     export LMOD_TERM_WIDTH=150
+     MODULEPATH_ROOT=$(projectDir)/mf;  export MODULEPATH_ROOT
+     MODULEPATH=$(projectDir)/mf//Core:$(testDir)/mf/Core//
+     export MODULEPATH
+     unset TERM
+
+     rm -fr _stderr.*  _stdout.* out.* err.* .lmod.d .lmodrc.lua
+     cp $(projectDir)/init/lmodrc.lua .lmodrc.lua
+
+
+     runLmod --version                # 1
+     runLmod load intel               # 2
+     runLmod avail                    # 3
+
+     runLmod avail gcc intel p a j m  # 4
+     runLmod unload intel             # 5
+     runLmod avail                    # 6
+     runLmod --show_hidden avail      # 7
+     runLmod -t    avail              # 8
+     runLmod -t --show_hidden avail   # 9
+     runLmod -t -d avail              #10
+     runLmod -t    avail git          #11
+     runLmod -t -d avail git          #12
+     runLmod -t    avail git/1.7.4.3  #13
+     runLmod use $(testDir)/mf/Core2  #14
+     runLmod avail local              #15
+     runLmod --ignore_cache avail     #16
+
+     runLmod purge                    #17
+     unsetMT
+     unset MODULEPATH
+     runLmod avail                    #18
+
+     export MODULEPATH=$(testDir)/mf/Core3
+     runLmod avail                    #19
+     runLmod load TACC                #20
+     runLmod load intel/15.0.2        #21
+     runLmod load intel               #22
+
+     runLmod use $(testDir)/mf/Core4  #23
+     runLmod avail                    #24
+
+     runLmod use $(testDir)/mf/Order  #25
+     export LMOD_LEGACY_VERSION_ORDERING=1
+     runLmod avail                    #26
+     unset LMOD_LEGACY_VERSION_ORDERING
+     runLmod avail                    #27
+     runLmod use $(testDir)/mf/Core6  #28
+     runLmod avail                    #29
+     export LMOD_CHECK_FOR_VALID_MODULE_FILES=yes
+     runLmod avail                    #30
+
+
+
+
+     HOME=$ORIG_HOME
+
+     cat _stdout.[0-9][0-9][0-9] > _stdout.orig
+     joinBase64Results -bash  _stdout.orig _stdout.new
+     cleanUp _stdout.new out.txt
+
+     cat _stderr.[0-9][0-9][0-9] > _stderr.orig
+     cleanUp _stderr.orig err.txt
+
+     rm -f results.csv
+     wrapperDiff --csv results.csv $(testDir)/out.txt out.txt
+     wrapperDiff --csv results.csv $(testDir)/err.txt err.txt
+     testFinish -r $(resultFn) -t $(runtimeFn) results.csv
+   ]],
+
+
+   blessScript = [[
+         # perform what is needed
+   ]],
+
+   tests = {
+      { id='t1'},
+   },
+
+}

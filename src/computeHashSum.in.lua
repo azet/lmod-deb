@@ -3,7 +3,7 @@
 
 --------------------------------------------------------------------------
 -- Fixme
--- @script computeHashSum 
+-- @script computeHashSum
 
 --------------------------------------------------------------------------
 -- Lmod License
@@ -42,16 +42,41 @@
 ------------------------------------------------------------------------
 -- Use command name to add the command directory to the package.path
 ------------------------------------------------------------------------
-local LuaCommandName = arg[0]
-local i,j = LuaCommandName:find(".*/")
-local LuaCommandName_dir = "./"
-if (i) then
-   LuaCommandName_dir = LuaCommandName:sub(1,j)
+local sys_lua_path = "@sys_lua_path@"
+if (sys_lua_path:sub(1,1) == "@") then
+   sys_lua_path = package.path
 end
-package.path = LuaCommandName_dir .. "../tools/?.lua;"   ..
-               LuaCommandName_dir .. "../shells/?.lua;"  ..
-               LuaCommandName_dir .. "?.lua;"            ..
-               package.path
+
+local sys_lua_cpath = "@sys_lua_cpath@"
+if (sys_lua_cpath:sub(1,1) == "@") then
+   sys_lua_cpath = package.cpath
+end
+
+package.path   = sys_lua_path
+package.cpath  = sys_lua_cpath
+
+local arg_0    = arg[0]
+local posix    = require("posix")
+local readlink = posix.readlink
+local stat     = posix.stat
+
+local st       = stat(arg_0)
+while (st.type == "link") do
+   arg_0 = readlink(arg_0)
+   st    = stat(arg_0)
+end
+
+local ia,ja = arg_0:find(".*/")
+local LuaCommandName_dir = "./"
+if (ia) then
+   LuaCommandName_dir = arg_0:sub(1,ja)
+end
+
+package.path  = LuaCommandName_dir .. "../tools/?.lua;"   ..
+                LuaCommandName_dir .. "../shells/?.lua;"  ..
+                LuaCommandName_dir .. "?.lua;"            ..
+                sys_lua_path
+package.cpath = sys_lua_cpath
 
 function cmdDir()
    return LuaCommandName_dir
@@ -62,6 +87,10 @@ HashSum = "@path_to_hashsum@"
 
 require("strict")
 require("myGlobals")
+local BuildFactory = require("BuildFactory")
+BuildFactory:master()
+
+
 require("utils")
 
 require("fileOps")
@@ -71,6 +100,7 @@ MCP           = {}
 mcp           = {}
 require("modfuncs")
 require("cmdfuncs")
+require("parseVersion")
 
 BaseShell         = require("BaseShell")
 Master            = require("Master")
@@ -99,7 +129,9 @@ function main()
    fh              = io.open(fn,"w")
    local i         = 1
    local masterTbl = masterTbl()
+   
    options()
+   parseVersion    = buildParseVersion()
 
    if (masterTbl.debug) then
       dbg:activateDebug(1, tonumber(masterTbl.indentLevel))
@@ -107,8 +139,6 @@ function main()
    dbg.start{"computeHashSum()"}
 
    setenv_lmod_version()    -- push Lmod version info into env for modulefiles.
-   build_epoch()            -- build the epoch function
-   build_accept_functions() -- Accept or ignore TCL modulefiles.
 
    require("StandardPackage")
    local lmodPath = os.getenv("LMOD_PACKAGE_PATH") or ""
@@ -141,15 +171,20 @@ function main()
    end
    fh:write(s)
    if (HashSum:sub(1,1) == "@" ) then
-      HashSum = findInPath("sha1sum")
+      HashSum = find_exec_path("sha1sum") or find_exec_path("shasum")
    end
    fh:close()
 
+   if (HashSum == nil) then
+      LmodSystemError("Unable to compute hashsum")
+   end
+   
+
    local result = capture(HashSum .. " " .. fn)
    os.remove(fn)
-   local i,j = result:find(" ")
-   dbg.print{"hash value: ",result:sub(1,i-1),"\n"}
-   print (result:sub(1,i-1))
+   ia = result:find(" ")
+   dbg.print{"hash value: ",result:sub(1,ia-1),"\n"}
+   print (result:sub(1,ia-1))
    dbg.fini("computeHashSum")
 end
 

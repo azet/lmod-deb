@@ -2,10 +2,10 @@
 -- -*- lua -*-
 
 --------------------------------------------------------------------------
--- This program takes shell scripts (either bash or csh) and converts 
+-- This program takes shell scripts (either bash or csh) and converts
 -- them to a modulefile (either Lua or TCL).  This program is a "new"
 -- but it is based on many design elements from sourceforge.net/projects/env2.
--- The program "env2" also converts shells to modulefiles but it does 
+-- The program "env2" also converts shells to modulefiles but it does
 -- other conversions as well.  This program is more limited it just does
 -- conversions from scripts to tcl or lua modules.
 --
@@ -15,7 +15,7 @@
 --     b) create an output factory:  MF_Lmod or MF_TCL to generate the
 --        output modulefile style.
 --     c) Process the before environment with the after environment and
---        generate the appropriate setenv's, prepend_path's and 
+--        generate the appropriate setenv's, prepend_path's and
 --        append_path's to convert from the old env to the new.
 --
 --
@@ -67,20 +67,49 @@
 --------------------------------------------------------------------------
 --  sh_to_modulefile :
 
-local program = arg[0]
-
-local i,j = program:find(".*/")
-local cmd_dir = "./"
-if (i) then
-   cmd_dir = program:sub(1,j)
+local sys_lua_path = "@sys_lua_path@"
+if (sys_lua_path:sub(1,1) == "@") then
+   sys_lua_path = package.path
 end
-package.path = cmd_dir .. "../tools/?.lua;" ..
-               cmd_dir .. "?.lua;"       .. package.path
+
+local sys_lua_cpath = "@sys_lua_cpath@"
+if (sys_lua_cpath:sub(1,1) == "@") then
+   sys_lua_cpath = package.cpath
+end
+
+package.path   = sys_lua_path
+package.cpath  = sys_lua_cpath
+
+local arg_0    = arg[0]
+local posix    = require("posix")
+local readlink = posix.readlink
+local stat     = posix.stat
+
+local st       = stat(arg_0)
+while (st.type == "link") do
+   arg_0 = readlink(arg_0)
+   st    = stat(arg_0)
+end
+
+local ia,ja = arg_0:find(".*/")
+local cmd_dir = "./"
+if (ia) then
+   cmd_dir  = arg_0:sub(1,ja)
+end
+
+package.path  = cmd_dir .. "../tools/?.lua;" ..
+                cmd_dir .. "?.lua;"          ..
+                sys_lua_path
+package.cpath = sys_lua_cpath
 
 require("strict")
 
 function cmdDir()
    return cmd_dir
+end
+
+function programName()
+   return arg_0
 end
 
 require("string_utils")
@@ -92,9 +121,9 @@ require("utils")
 MF_Base = require("MF_Base")
 
 local Version      = "0.0"
+_G._DEBUG          = false                 -- Required by luaposix 33
 local dbg          = require("Dbg"):dbg()
 local Optiks       = require("Optiks")
-local posix        = require("posix")
 local getenv_posix = posix.getenv
 local setenv_posix = posix.setenv
 local concatTbl    = table.concat
@@ -124,8 +153,74 @@ local ignoreA = {
    "SHLVL", "LC_ALL", "SSH_ASKPASS", "SSH_CLIENT", "SSH_CONNECTION", "SSH_TTY", "TERM",
    "USER", "EDITOR", "HISTFILE", "HISTSIZE", "MAILER", "PAGER", "REPLYTO", "VISUAL",
    "_", "ENV2", "OLDPWD", "PS1","PS2", "PRINTER", "TTY", "TZ", "GROUP", "HOSTTYPE",
-   "MACHTYPE", "OSTYPE","REMOTEHOST", "VENDOR","HOST","module",
+   "MACHTYPE", "OSTYPE","REMOTEHOST", "VENDOR","HOST","module"
 }
+
+
+local dbg          = require("Dbg"):dbg()
+_G._DEBUG          = false                       -- Required by luaposix 33
+local posix        = require("posix")
+local getenv       = os.getenv
+local setenv_posix = posix.setenv
+
+--------------------------------------------------------------------------
+-- Capture output and exit status from *cmd*
+-- @param cmd A string that contains a unix command.
+-- @param envT A table that contains environment variables to be set/restored when running *cmd*.
+function capture(cmd, envT)
+   dbg.start{"capture(",cmd,")"}
+   if (dbg.active()) then
+      dbg.print{"cwd: ",posix.getcwd(),"\n",level=2}
+   end
+
+   local newT = {}
+   envT = envT or {}
+
+   for k, v in pairs(envT) do
+      dbg.print{"envT[",k,"]=",v,"\n"}
+      newT[k] = getenv(k)
+      dbg.print{"newT[",k,"]=",newT[k],"\n"}
+      setenv_posix(k, v, true)
+   end
+
+   -- in Lua 5.1, p:close() does not return exit status,
+   -- so we append 'echo $?' to the command to determine the exit status
+   local ec_msg = "Lmod Capture Exit Code"
+   if _VERSION == "Lua 5.1" then
+      cmd = cmd .. '; echo "' .. ec_msg .. ': $?"'
+   end
+
+   local out
+   local status
+   local p   = io.popen(cmd)
+   if (p ~= nil) then
+      out    = p:read("*all")
+      status = p:close()
+   end
+
+   -- trim 'exit code: <value>' from the end of the output and determine exit status
+   if _VERSION == "Lua 5.1" then
+      local exit_code = out:match(ec_msg .. ": (%d+)\n$")
+      if not exit_code then
+         LmodError("Failed to find '" .. ec_msg .. "' in output: " .. out)
+      end
+      status = exit_code == '0'
+      out = out:gsub(ec_msg .. ": %d+\n$", '')
+   end
+
+   for k, v in pairs(newT) do
+      setenv_posix(k,v, true)
+   end
+
+   if (dbg.active()) then
+      dbg.start{"capture output()",level=2}
+      dbg.print{out}
+      dbg.fini("capture output")
+   end
+   dbg.print{"status: ",status,", type(status): ",type(status),"\n"}
+   dbg.fini("capture")
+   return out, status
+end
 
 function masterTbl()
    return s_master
@@ -185,13 +280,13 @@ function path2pathA(path)
    return pathA
 end
 
-local function cleanPath(v)
+local function cleanPath(value)
 
    local pathT  = {}
    local pathA  = {}
 
    local idx = 0
-   for path in v:split(':') do
+   for path in value:split(':') do
       idx = idx + 1
       path = path_regularize(path)
       if (pathT[path] == nil) then
@@ -205,15 +300,15 @@ local function cleanPath(v)
 
    for execName in pairs(execT) do
       local cmd = findInPath(execName, myPath)
-      if (cmd ~= '') then
+      if (cmd) then
          local dir = dirname(cmd):gsub("/+$","")
          local p = path_regularize(dir)
          pathT[p].keep = true
       end
    end
-         
+
    for path in pairs(pathT) do
-      if (v:find('^/usr/')) then
+      if (value:find('^/usr/')) then
          pathT[path].keep = true
       end
    end
@@ -306,7 +401,7 @@ function cleanEnv()
       end
    end
 end
-   
+
 
 
 function main()
@@ -325,7 +420,7 @@ function main()
       dbg:activateDebug(masterTbl.debug)
    end
 
-   
+
    if (masterTbl.saveEnvFn) then
       wrtEnv(masterTbl.saveEnvFn)
       os.exit(0)
@@ -335,6 +430,10 @@ function main()
 
    if (LuaCmd:sub(1,1) == "@") then
       LuaCmd = findInPath("lua")
+      if (LuaCmd == nil) then
+         io.stderr:write("Unable to find lua program")
+         return
+      end
    end
 
    if (masterTbl.cleanEnv) then
@@ -347,22 +446,20 @@ function main()
    if(masterTbl.inStyle:lower() == "csh") then
       cmdA    = {
          "csh", "-f","-c",
-         "\"source " ..concatTbl(pargs," ") .. '>& /dev/null; '.. LuaCmd .. " " .. program .. " --saveEnv -\""
+         "\"source " ..concatTbl(pargs," ") .. '>& /dev/null; '.. LuaCmd .. " " .. programName() .. " --saveEnv -\""
       }
    else -- Assume bash unless told otherwise
       cmdA    = {
          "bash", "--noprofile","--norc","-c",
-         "\". " ..concatTbl(pargs," ") .. '>/dev/null 2>&1; '.. LuaCmd .. " " .. program .. " --saveEnv -\""
+         "\". " ..concatTbl(pargs," ") .. '>/dev/null 2>&1; '.. LuaCmd .. " " .. programName() .. " --saveEnv -\""
       }
    end
-      
+
    local s = capture(concatTbl(cmdA," "))
-   
+
    local f = io.open("s.log","w")
    f:write(s)
    f:close()
-   
-   
 
    local factory = MF_Base.build(masterTbl.style)
 
@@ -390,28 +487,28 @@ function options()
       action = "count",
       help   = "Program tracing written to stderr",
    }
-   cmdlineParser:add_option{ 
+   cmdlineParser:add_option{
       name   = {'--saveEnv'},
       dest   = 'saveEnvFn',
       action = 'store',
       help   = "Internal use only",
    }
 
-   cmdlineParser:add_option{ 
+   cmdlineParser:add_option{
       name   = {'--cleanEnv'},
       dest   = 'cleanEnv',
       action = 'store_true',
       help   = "Create a sterile user environment before analyzing",
    }
 
-   cmdlineParser:add_option{ 
+   cmdlineParser:add_option{
       name   = {'-o','--output'},
       dest   = 'outFn',
       action = 'store',
       help   = "output modulefile",
    }
 
-   cmdlineParser:add_option{ 
+   cmdlineParser:add_option{
       name    = {'--to'},
       dest    = 'style',
       action  = 'store',
@@ -419,7 +516,7 @@ function options()
       default = "Lua",
    }
 
-   cmdlineParser:add_option{ 
+   cmdlineParser:add_option{
       name    = {'--from'},
       dest    = 'inStyle',
       action  = 'store',

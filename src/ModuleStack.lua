@@ -60,20 +60,20 @@ local M = {}
 s_moduleStack = {}
 
 --------------------------------------------------------------------------
--- new(): A singleton constructor for this class.
-
+-- A singleton constructor for this class.
+-- @param self A ModuleStack object.
 local function new(self)
    local o = {}
 
    setmetatable(o,self)
    self.__index = self
-   o.stack      = { {full = "lmod_base/0.0", sn = "lmod_base", loadCnt = 0, fn = "unknown"} }
+   o.stack      = { {full = "lmod_base/0.0", sn = "lmod_base", fn = "unknown"} }
    return o
 end
 
 --------------------------------------------------------------------------
--- ModuleStack:moduleStack(): The wrapper around the singleton ctor.
-
+-- The wrapper around the singleton ctor.
+-- @param self A ModuleStack object.
 function M.moduleStack(self)
    if (next(s_moduleStack) == nil) then
       s_moduleStack = new(self)
@@ -82,35 +82,51 @@ function M.moduleStack(self)
 end
 
 --------------------------------------------------------------------------
--- ModuleStack:push(): push current module information on stack.
-
+-- Push current module information on stack.
+-- @param self A ModuleStack object.
+-- @param full The full name of the module.
+-- @param usrName The user name of the module.
+-- @param sn The short name of the module.
+-- @param fn The filename of the module.
 function M.push(self, full, usrName, sn, fn)
-   local entry = {full = full, usrName = usrName, sn = sn, loadCnt = 0, fn= fn}
+   local entry = {full = full, usrName = usrName, sn = sn, fn= fn}
    local stack = self.stack
 
    stack[#stack+1] = entry
 end
 
 --------------------------------------------------------------------------
--- ModuleStack:pop(): pop the module off the stack when loading is
---                    complete.
-
+-- Pop the module off the stack when loading is complete.
+-- @param self A ModuleStack object.
 function M.pop(self)
    local stack = self.stack
    remove(stack)
 end
 
 --------------------------------------------------------------------------
--- ModuleStack:empty(): report true when the stack is empty.
-
+-- Report true when the stack is empty.
+-- @param self A ModuleStack object.
 function M.empty(self)
    return (#self.stack == 1)
 end
 
 --------------------------------------------------------------------------
--- ModuleStack:fullName(): return the full module name for modulefile at
---                         the top of the stack.
+-- Report true when the stack has only a single module.
+-- @param self A ModuleStack object.
+function M.atTop(self)
+   return (#self.stack == 2)
+end
 
+--------------------------------------------------------------------------
+-- Report the number of modules in the stack
+-- @param self A ModuleStack object.
+function M.count(self)
+   return (#self.stack - 1)
+end
+
+--------------------------------------------------------------------------
+-- Return the full module name for modulefile at the top of the stack.
+-- @param self A ModuleStack object.
 function M.fullName(self)
    local stack = self.stack
    local top   = stack[#stack]
@@ -118,8 +134,8 @@ function M.fullName(self)
 end
 
 --------------------------------------------------------------------------
--- ModuleStack:sn(): return the short module name for modulefile at
---                   the top of the stack.
+-- Return the short module name for modulefile at the top of the stack.
+-- @param self A ModuleStack object.
 function M.sn(self)
    local stack = self.stack
    local top   = stack[#stack]
@@ -127,9 +143,9 @@ function M.sn(self)
 end
 
 --------------------------------------------------------------------------
--- ModuleStack:usrName(): return the name specified by the user for
---                        modulefile at the top of the stack.
-
+-- Return the name specified by the user for modulefile at the top of the
+-- stack.
+-- @param self A ModuleStack object.
 function M.usrName(self)
    local stack = self.stack
    local top   = stack[#stack]
@@ -137,8 +153,8 @@ function M.usrName(self)
 end
 
 --------------------------------------------------------------------------
--- ModuleStack:version(): return the module version for modulefile at
---                        the top of the stack.
+-- Return the module version for modulefile at top of the stack.
+-- @param self A ModuleStack object.
 function M.version(self)
    local stack   = self.stack
    local top     = stack[#stack]
@@ -148,13 +164,22 @@ function M.version(self)
 end
 
 --------------------------------------------------------------------------
--- ModuleStack:fileName(): return the file name for modulefile at
---                         the top of the stack.
-
+-- Return the file name for modulefile at the top of the stack.
+-- @param self A ModuleStack object.
 function M.fileName(self)
    local stack = self.stack
    local top   = stack[#stack]
    return top.fn
+end
+
+function M.traceBack(self)
+   local a     = {}
+   local stack = self.stack
+
+   for i = #stack, 2,-1 do
+      a[#a+1] = {fullName = stack[i].full, fn = stack[i].fn }
+   end
+   return a
 end
 
 return M

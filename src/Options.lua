@@ -44,18 +44,19 @@ require("strict")
 --
 --------------------------------------------------------------------------
 
-Error = nil
+_G._DEBUG          = false               -- Required by the new lua posix
 local dbg          = require("Dbg"):dbg()
 local format       = string.format
 local posix        = require("posix")
 local setenv_posix = posix.setenv
 local stderr       = io.stderr
 local systemG      = _G
-
+local concatTbl    = table.concat
 local M = {}
 
-s_options = false
-
+--------------------------------------------------------------------------
+-- Private Ctor for Option class.
+-- @param self An Option object
 local function new(self)
    local o = {}
 
@@ -64,18 +65,29 @@ local function new(self)
    return o
 end
 
+--------------------------------------------------------------------------
+-- This function forces the option parser to write to stderr instead of
+-- stdout.
 local function prt(...)
    stderr:write(...)
 end
 
+
+--------------------------------------------------------------------------
+-- This function prevents the option parser from exiting when it finds an
+-- error.
 local function nothing()
 end
 
 
+--------------------------------------------------------------------------
+-- Parse the command line options. Places the options in *masterTbl*,
+-- place the positional arguments in *masterTbl.pargs*
+-- @param self An Option object.
+-- @param usage The program usage string.
 function M.options(self, usage)
 
    local Optiks = require("Optiks")
-   s_options = new(self)
    local cmdlineParser  = Optiks:new{usage   = usage,
                                      error   = LmodWarning,
                                      exit    = nothing,
@@ -86,7 +98,7 @@ function M.options(self, usage)
    local styleA       = {}
    local icnt         = 0
    local defaultStyle = "system"
-   
+
    for s in LMOD_AVAIL_STYLE:split(":") do
       icnt = icnt + 1
       if (s:sub(1,1) == "<" and s:sub(-1,-1) == ">") then
@@ -113,6 +125,12 @@ function M.options(self, usage)
       help    = "Site controlled avail style: "..concatTbl(styleA," ").." (default: "..defaultStyle..")"
    }
 
+   cmdlineParser:add_option{
+      name   = {"--regression_testing"},
+      dest   = "rt",
+      action = "store_true",
+      help   = "Lmod regression testing",
+   }
 
    cmdlineParser:add_option{
       name   = {"-D"},
@@ -126,6 +144,13 @@ function M.options(self, usage)
       dest   = "dbglvl",
       action = "store",
       help   = "Program tracing written to stderr",
+   }
+
+   cmdlineParser:add_option{
+      name   = {"--pin_versions"},
+      dest   = "pinVersions",
+      action = "store",
+      help   = "When doing a restore use specified version, do not follow defaults",
    }
 
    cmdlineParser:add_option{
@@ -221,6 +246,13 @@ function M.options(self, usage)
    }
 
    cmdlineParser:add_option{
+      name   = {"--gitversion"},
+      dest   = "gitversion",
+      action = "store_true",
+      help   = "Dump git version in a machine readable way and quit",
+   }
+
+   cmdlineParser:add_option{
       name   = {"--dumpversion"},
       dest   = "dumpversion",
       action = "store_true",
@@ -246,6 +278,13 @@ function M.options(self, usage)
       dest   = "config",
       action = "store_true",
       help   = "Report Lmod Configuration",
+   }
+
+   cmdlineParser:add_option{
+      name   = {"--config-json" },
+      dest   = "configjson",
+      action = "store_true",
+      help   = "Report Lmod Configuration in json format",
    }
 
    cmdlineParser:add_option{
@@ -336,6 +375,10 @@ function M.options(self, usage)
 
    if (optionTbl.redirect_off) then
       LMOD_REDIRECT = "no"
+   end
+
+   if (optionTbl.pinVersions) then
+      LMOD_PIN_VERSIONS = "yes"
    end
 end
 

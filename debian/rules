@@ -4,6 +4,9 @@
 # Uncomment this to turn on verbose mode.
 #export DH_VERBOSE=1
 
+TDIR=debian/lmod
+
+
 %:
 	dh $@  --with autotools-dev
 
@@ -11,3 +14,7 @@ override_dh_auto_test:
 
 override_dh_pysupport:
 
+override_dh_auto_install:
+	dh_auto_install
+	cp ${TDIR}/usr/share/lmod/lmod/init/profile ${TDIR}/etc/profile.d/lmod.sh
+	cp debian/modulespath ${TDIR}/etc/lmod/

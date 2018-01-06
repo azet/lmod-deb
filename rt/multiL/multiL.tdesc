@@ -1,0 +1,75 @@
+-- -*- lua -*-
+local testName = "multiL"
+
+testdescript = {
+   owner   = "rtm",
+   product = "modules",
+   description = [[
+	 Test initial module load
+   ]],
+   keywords = {testName },
+
+   active = 1,
+   testName = testName,
+   job_submit_method = "INTERACTIVE",
+
+   runScript = [[
+
+     . $(projectDir)/rt/common_funcs.sh
+
+     unsetMT
+     initStdEnvVars
+     MODULEPATH_ROOT=$(testDir)/mf;       export MODULEPATH_ROOT
+     MODULEPATH=$(testDir)/mf/Core;       export MODULEPATH
+
+     rm -f  _stderr.* _stdout.* err.* out.*
+     rm -fr .lmod.d .lmodrc.lua
+     cp $(projectDir)/init/lmodrc.lua .lmodrc.lua
+
+     mkdir -p $HOME/.lmod.d/.cache
+     buildModuleT $MODULEPATH > $HOME/.lmod.d/.cache/moduleT.lua
+     buildDbT     $MODULEPATH > $HOME/dbT.lua
+
+     runLmod --version                  # 1
+     runLmod avail                      # 2
+     runLmod spider                     # 3
+     runLmod load cmplr/gcc             # 4
+     runLmod avail                      # 5
+     runLmod load mpi/mpich2            # 6
+     runLmod load parLib/petsc          # 7
+     runLmod list                       # 8
+     runLmod avail                      # 9
+     runLmod unload cmplr/gcc           #10
+     runLmod load cmplr/gcc             #11
+     runLmod swap cmplr/gcc cmplr/intel #12
+     runLmod list                       #13
+     runLmod unload cmplr/intel/13.1    #14
+     runLmod list                       #15
+     runLmod load cmplr/intel/13.1      #16
+     runLmod list                       #17
+
+     HOME=$ORIG_HOME
+
+     cat _stdout.[0-9][0-9][0-9] > _stdout.orig
+     joinBase64Results  -bash  _stdout.orig _stdout.new
+     cleanUp _stdout.new out.txt
+
+     cat _stderr.[0-9][0-9][0-9] > _stderr.orig
+     cleanUp _stderr.orig err.txt
+
+     rm -f results.csv
+     wrapperDiff --csv results.csv $(testDir)/out.txt out.txt
+     wrapperDiff --csv results.csv $(testDir)/err.txt err.txt
+     testFinish -r $(resultFn) -t $(runtimeFn) results.csv
+   ]],
+
+
+   blessScript = [[
+         # perform what is needed
+   ]],
+
+   tests = {
+      { id='t1'},
+   },
+
+}

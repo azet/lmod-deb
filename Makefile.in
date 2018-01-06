@@ -1,3 +1,4 @@
+srcdir                    := @srcdir@
 CC                        := @CC@
 PATH_TO_SRC               := @PATH_TO_SRC@
 path_to_src               := PATH_TO_SRC
@@ -5,42 +6,60 @@ ifeq ($(PATH_TO_SRC),@$(path_to_src)@)
   PATH_TO_SRC             := .
 endif
 
-TOOL_SRC                  := $(wildcard $(PATH_TO_SRC)/tools/*.lua)
+TOOL_SRC                  := $(wildcard $(srcdir)/tools/*.lua)
 HAVE_LUA_JSON             := @HAVE_LUA_JSON@
 ifeq ($(HAVE_LUA_JSON),yes)
-  TOOL_SRC                := $(filter-out $(PATH_TO_SRC)/tools/json.lua, $(TOOL_SRC))
+  TOOL_SRC                := $(filter-out $(srcdir)/tools/json.lua, $(TOOL_SRC))
 endif
 
-export IGNORE_DIRS        := $(shell $(PATH_TO_SRC)/src/ignore_dirs_converter @IGNORE_DIRS@)
+CURRENT_MK                := $(lastword $(MAKEFILE_LIST))
+PATH_TO_LUA	  	  := @PATH_TO_LUA@
+export IGNORE_DIRS        := $(shell $(PATH_TO_LUA)/lua $(srcdir)/src/ignore_dirs_converter @IGNORE_DIRS@)
 REDIRECT                  := @REDIRECT@
 LMOD_FULL_SETTARG_SUPPORT := $(shell echo "@SETTARG@"       | tr '[:upper:]' '[:lower:]')
 USE_DOT_FILES             := $(shell echo "@USE_DOT_FILES@" | tr '[:upper:]' '[:lower:]')
 PREPEND_BLOCK     	  := $(shell echo "@PREPEND_BLOCK@" | tr '[:upper:]' '[:lower:]')
 COLORIZE          	  := $(shell echo "@COLORIZE@"      | tr '[:upper:]' '[:lower:]')
+SYS_LD_LIB_PATH           := @SYS_LD_LIB_PATH@
+SYS_LD_PRELOAD            := @SYS_LD_PRELOAD@
+SYS_LUA_PATH              := @SYS_LUA_PATH@
+SYS_LUA_CPATH             := @SYS_LUA_CPATH@
 CASE_INDEPENDENT_SORTING  := @CASE_INDEPENDENT_SORTING@
-ZSH_SITE_FUNCTIONS_DIR    := @ZSH_SITE_FUNCTIONS_DIR@
+ZSH_SITE_FUNCTIONS_DIRS   := @ZSH_SITE_FUNCTIONS_DIRS@
 SPIDER_CACHE_DESCRIPT_FN  := @SPIDER_CACHE_DESCRIPT_FN@
+CHECK_VALID               := @CHECK_VALID@
 ANCIENT           	  := @ANCIENT@
 ALLOW_TCL_MFILES          := @ALLOW_TCL_MFILES@
 MPATH_AVAIL               := @MPATH_AVAIL@
+TMOD_PATH_RULE            := @TMOD_PATH_RULE@
+CACHED_LOADS              := @CACHED_LOADS@
+EXACT_MATCH               := @EXACT_MATCH@
 DUPLICATE_PATHS           := @DUPLICATE_PATHS@
+DISABLE_NAME_AUTOSWAP     := @DISABLE_NAME_AUTOSWAP@
 SHORT_TIME        	  := @SHORT_TIME@
+PIN_VERSIONS              := @PIN_VERSIONS@
 AUTO_SWAP        	  := @AUTO_SWAP@
 SPIDER_CACHE_DIRS 	  := @SPIDER_CACHE_DIRS@
+LEGACY_ORDERING           := @LEGACY_ORDERING@
 EXPORT_MODULE             := @EXPORT_MODULE@
+BASENAME                  := @BASENAME@
+PS                        := @PS@
+EXPR                      := @EXPR@
 PATH_TO_HASHSUM   	  := @PATH_TO_HASHSUM@
-PATH_TO_LUA	  	  := @PATH_TO_LUA@
+PATH_TO_LUAC              := @PATH_TO_LUAC@
 PATH_TO_PAGER	  	  := @PATH_TO_PAGER@
 PATH_TO_TCLSH             := @PATH_TO_TCLSH@
+PATH_TO_TR                := @PATH_TO_TR@
 MODULEPATH_ROOT   	  := @MODULEPATH_ROOT@
-VERSION_SRC	  	  := $(PATH_TO_SRC)/src/Version.lua
+VERSION_SRC	  	  := $(srcdir)/src/Version.lua
 LUA_INCLUDE       	  := @LUA_INCLUDE@
 UPDATE_SYSTEM_FN  	  := @UPDATE_SYSTEM_FN@
+GIT_BRANCH                := master
 GIT_PROG                  := @PATH_TO_GIT@
 GIT_VERSION               := $(shell if [ -n "$(GIT_PROG)" -a -d .git ]; then lmodV=`git describe --always`; echo "($$lmodV)"; else echo "@git@"; fi)
 prefix		  	  := @prefix@
 package		  	  := lmod
-version		  	  := $(shell cd $(PATH_TO_SRC)/src; $(PATH_TO_LUA)/lua -e "V=require('Version'); print(V.tag())")
+version		  	  := $(shell cd $(srcdir)/src; $(PATH_TO_LUA)/lua -e "V=require('Version'); print(V.tag())")
 PKGV		  	  := $(prefix)/$(package)/$(version)
 PKG		  	  := $(prefix)/$(package)/$(package)
 LIBEXEC		  	  := $(prefix)/$(package)/$(version)/libexec
@@ -50,11 +69,11 @@ SETTARG                   := $(prefix)/$(package)/$(version)/settarg
 INIT		  	  := $(prefix)/$(package)/$(version)/init
 LMOD_MF 	  	  := $(prefix)/$(package)/$(version)/modulefiles/Core
 MAN_PAGES                 := $(prefix)/$(package)/$(version)/share/man/cat1
-LMOD_MF_SOURCE            := MF/*.version.lua
-SETTARG_SOURCE            := settarg/*.lua  settarg/targ.in
+LMOD_MF_SOURCE            := $(patsubst %, $(srcdir)/%, MF/*.version.lua)
+SETTARG_SOURCE            := $(patsubst %, $(srcdir)/%, settarg/*.lua  settarg/targ.in)
 
 DIRLIST		  	  := $(DESTDIR)$(LIBEXEC) $(DESTDIR)$(TOOLS) $(DESTDIR)$(SETTARG) \
-                             $(DESTDIR)$(SHELLS) $(DESTDIR)$(INIT) $(DESTDIR)$(LIB)       \
+                             $(DESTDIR)$(SHELLS)  $(DESTDIR)$(INIT)  $(DESTDIR)$(LIB)     \
                              $(DESTDIR)$(LMOD_MF) $(DESTDIR)$(MAN_PAGES)
 
 STANDALONE_PRGM   	  := src/lmod.in.lua src/addto.in.lua src/getmt.in.lua      \
@@ -62,39 +81,49 @@ STANDALONE_PRGM   	  := src/lmod.in.lua src/addto.in.lua src/getmt.in.lua      \
                              src/processModuleUsage.in.lua src/reportUsers.in.lua   \
                              src/clearMT_cmd.in.lua src/ml_cmd.in.lua               \
                              src/spiderCacheSupport.in.lua                          \
-                             src/sh_to_modulefile.in.lua
-STANDALONE_PRGM           := $(patsubst %, $(PATH_TO_SRC)/%, $(STANDALONE_PRGM))
-SHELL_INIT	  	  := bash.in csh.in ksh.in tcsh.in zsh.in sh.in perl.in                       \
-                             env_modules_python.py.in lmod_bash_completions lmodrc.lua
-SHELL_INIT	  	  := $(patsubst %, $(PATH_TO_SRC)/init/%, $(SHELL_INIT))
+                             src/sh_to_modulefile.in.lua                            \
+	                     src/update_lmod_system_cache_files.in                  \
+                             src/ignore_dirs_converter
+STANDALONE_PRGM           := $(patsubst %, $(srcdir)/%, $(STANDALONE_PRGM))
+SHELL_INIT	  	  := bash.in csh.in ksh.in tcsh.in zsh.in sh.in perl.in r.in \
+                             env_modules_python.py.in lmod_bash_completions
+SHELL_INIT	  	  := $(patsubst %, $(srcdir)/init/%, $(SHELL_INIT))
+LMODRC_INIT               := $(patsubst %, $(srcdir)/init/%, lmodrc.lua)
+
 
 ZSH_FUNCS                 := _ml _module
-ZSH_FUNCS                 := $(patsubst %, $(PATH_TO_SRC)/init/zsh/%, $(ZSH_FUNCS))
+ZSH_FUNCS                 := $(patsubst %, $(srcdir)/init/zsh/%, $(ZSH_FUNCS))
 
 STARTUP		  	  := profile.in cshrc.in
-STARTUP		  	  := $(patsubst %, $(PATH_TO_SRC)/init/%, $(STARTUP))
+STARTUP		  	  := $(patsubst %, $(srcdir)/init/%, $(STARTUP))
 
 MAIN_DIR	  	  := Makefile.in INSTALL configure README_lua_modulefiles.txt \
                              README README.old License
 
 CONTRIB_DIRS           	  :=  \
-                              bash_patch                        \
                               BuildSystemCacheFile              \
+                              Deprecating_Modules               \
+                              SitePackage                       \
+                              TACC                              \
+                              bash_patch                        \
                               converting_shell_to_module_files  \
                               hook                              \
                               parseVersions                     \
-	                      settarg                           \
-                              SitePackage                       \
-                              TACC                              \
+                              settarg                           \
+                              tracking_module_usage             \
                               tricky_modulefiles
 
-CONTRIB                   := $(patsubst %, $(PATH_TO_SRC)/contrib/%, $(CONTRIB_DIRS))
-lua_code	  	  := $(filter-out %.in.lua, $(wildcard $(PATH_TO_SRC)/src/*.lua))   \
-                             $(wildcard $(PATH_TO_SRC)/src/*.tcl)
-VDATE		  	  := $(shell date +'%F %H:%M')
 
-ComputeHashSum    	  := $(PATH_TO_SRC)/src/computeHashSum.in.lua
-spiderCacheSupportCMD     := lua $(PATH_TO_SRC)/src/spiderCacheSupport.in.lua
+
+CONTRIB                   := $(patsubst %, $(srcdir)/contrib/%, $(CONTRIB_DIRS))
+lua_code	  	  := $(filter-out %.in.lua, $(wildcard $(srcdir)/src/*.lua))   \
+                             $(wildcard $(srcdir)/src/*.tcl)
+VDATE		  	  := $(shell date +'%F %H:%M %:z')
+
+ComputeHashSum    	  := $(srcdir)/src/computeHashSum.in.lua
+spiderCacheSupportCMD     := $(PATH_TO_LUA)/lua $(srcdir)/src/spiderCacheSupport.in.lua
+export L_PATH              =  $(LUA_PATH)
+export L_CPATH             =  $(LUA_CPATH)
 
 HAVE_LUA_TERM             := @HAVE_LUA_TERM@
 ifneq ($(HAVE_LUA_TERM),yes)
@@ -104,11 +133,16 @@ endif
 
 .PHONY: test pkgs man_pages
 
-all: 
+all:
 	@echo done
 
-pre-install: $(DIRLIST) shell_init startup libexec spiderCacheSupport Inst_Tools \
-             Inst_Shells Inst_Settarg Inst_Lmod_MF $(PKGS) other_tools man_pages
+uninstall:
+	$(RM) -rf $(DESTDIR)$(prefix)/$(package)
+	@echo "If you added lmod files to /etc/profile.d please remove them."
+
+pre-install: $(DIRLIST) lmodrc_init shell_init startup libexec spiderCacheSupport \
+             Inst_Tools Inst_Shells Inst_Settarg Inst_Lmod_MF $(PKGS) other_tools \
+             man_pages
 
 install: pre-install  zsh_tab_funcs
 	$(MAKE) PKGV=$(PKG) shell_init
@@ -117,11 +151,12 @@ install: pre-install  zsh_tab_funcs
 
 echo:
 	@echo Version: $(version)
-	@echo GIT_VERSION: $(GIT_VERSION)
 	@echo IGNORE_DIRS: $(IGNORE_DIRS)
+	@echo LUA_PATH: $$LUA_PATH
+	@echo L_PATH: "$(L_PATH)"
 
 man_pages:
-	$(PATH_TO_LUA)/lua $(PATH_TO_SRC)/src/lmod.in.lua bash --help >/dev/null 2> $(DESTDIR)$(MAN_PAGES)/module.1
+	-$(PATH_TO_LUA)/lua $(srcdir)/src/lmod.in.lua bash --help >/dev/null 2> $(DESTDIR)$(MAN_PAGES)/module.1
 
 $(DIRLIST) :
 	mkdir -p $@
@@ -135,20 +170,36 @@ __installMe:
            sed  -e 's|@PREFIX@|$(prefix)|g'                            	   	  \
 	        -e 's|@path_to_lua@|$(PATH_TO_LUA)|g'                 	   	  \
 	        -e 's|@path_to_hashsum@|$(PATH_TO_HASHSUM)|g'         	   	  \
-	        -e 's|^#!/usr/bin/env tclsh$$|#!$(PATH_TO_TCLSH)|g'    	   	  \
-	        -e 's|@bash_err_to_out@|$(BASH_ERR_TO_OUT)|g'         	   	  \
-	        -e 's|@tcsh_err_to_out@|$(TCSH_ERR_TO_OUT)|g'         	   	  \
 	        -e 's|@path_to_pager@|$(PATH_TO_PAGER)|g'             	   	  \
 	        -e 's|@case_independent_sorting@|$(CASE_INDEPENDENT_SORTING)|g'   \
                 -e 's|@lmod_full_settarg_support@|$(LMOD_FULL_SETTARG_SUPPORT)|g' \
                 -e 's|@use_dot_files@|$(USE_DOT_FILES)|g'             	   	  \
                 -e 's|@git@|$(GIT_VERSION)|g'                              	  \
                 -e 's|--@ignore_dirs@--|$(IGNORE_DIRS)|g'                         \
+	        -e 's|@sys_lua_path@|$(SYS_LUA_PATH)|g'                  	  \
+	        -e 's|@sys_lua_cpath@|$(SYS_LUA_CPATH)|g'                  	  \
+                -e 's|@path_to_luac@|$(PATH_TO_LUAC)|g'                  	  \
                 -e 's|@have_lua_term@|$(HAVE_LUA_TERM)|g'                  	  \
                 -e 's|@have_lua_json@|$(HAVE_LUA_JSON)|g'                  	  \
+                -e 's|@tr@|$(PATH_TO_TR)|g'                             	  \
+                -e 's|@tclsh@|$(PATH_TO_TCLSH)|g'                             	  \
+                -e 's|@disable_name_autoswap@|$(DISABLE_NAME_AUTOSWAP)|g'     	  \
+	        -e 's|@tmod_path_rule@|$(TMOD_PATH_RULE)|g'            	   	  \
 	        -e 's|@redirect@|$(REDIRECT)|g'                       	   	  \
+	        -e 's|@basename@|$(BASENAME)|g'                       	   	  \
+	        -e 's|@cached_loads@|$(CACHED_LOADS)|g'                	   	  \
+	        -e 's|@check_for_valid_module_files@|$(CHECK_VALID)|g'            \
+	        -e 's|@ps@|$(PS)|g'                              	   	  \
+	        -e 's|@expr@|$(EXPR)|g'                              	   	  \
+	        -e 's|@libexec@|$(LIBEXEC)|g'                       	   	  \
+	        -e 's|@legacy_ordering@|$(LEGACY_ORDERING)|g'           	  \
+	        -e 's|@pin_versions@|$(PIN_VERSIONS)|g'                	   	  \
 	        -e 's|@auto_swap@|$(AUTO_SWAP)|g'                      	   	  \
+	        -e 's|@sys_ld_lib_path@|$(SYS_LD_LIB_PATH)|g'                     \
+	        -e 's|@sys_ld_preload@|$(SYS_LD_PRELOAD)|g'                       \
 	        -e 's|@export_module@|$(EXPORT_MODULE)|g'             	   	  \
+                -e 's|@lmod_version@|$(version)|g'               	   	  \
+                -e 's|@exact_match@|$(EXACT_MATCH)|g'               	   	  \
 	        -e 's|@ancient@|$(ANCIENT)|g'                         	   	  \
 	        -e 's|@prepend_block@|$(PREPEND_BLOCK)|g'             	   	  \
 	        -e 's|@colorize@|$(COLORIZE)|g'                       	   	  \
@@ -178,6 +229,9 @@ generate_doc:
 shell_init: $(SHELL_INIT)
 	$(MAKE) FILELIST="$^" DIRLOC=$(DESTDIR)$(INIT)    __installMe
 
+lmodrc_init: $(LMODRC_INIT)
+	$(MAKE) FILELIST="$^" DIRLOC=$(DESTDIR)$(INIT)    __installMe
+
 startup: $(STARTUP)
 	$(MAKE) FILELIST="$^" DIRLOC=$(DESTDIR)$(INIT)    __installMe
 
@@ -195,24 +249,39 @@ src/computeHashSum: $(ComputeHashSum)
 	chmod +x $@
 
 pkgs:
-	cd $(PATH_TO_SRC)/pkgs; \
+	cd $(srcdir)/pkgs; \
         $(MAKE) LUA_INC=$(LUA_INCLUDE)  LIB=$(DESTDIR)$(LIB) \
                 SHARE=$(DESTDIR)$(LIBEXEC) CC=$(CC) install
 
 zsh_tab_funcs: $(ZSH_FUNCS)
-	-if [ -n "$(ZSH_SITE_FUNCTIONS_DIR)" ]; then                \
-          cp $^ $(DESTDIR)$(ZSH_SITE_FUNCTIONS_DIR)  2> /dev/null;  \
+	-if [ -n "$(ZSH_SITE_FUNCTIONS_DIRS)" ]; then               \
+          for i in $${ZSH_SITE_FUNCTIONS_DIRS//:/ }; do             \
+            cp $^ $(DESTDIR)$$i  2> /dev/null;                      \
+	  done;                                                     \
 	  true;                                                     \
         fi
 
-makefile: $(PATH_TO_SRC)/Makefile.in ./config.status
+makefile: $(srcdir)/Makefile.in ./config.status
 	./config.status $@
 
 config.status:
 	./config.status --recheck
 
 dist:
-	$(MAKE) DistD=DIST _dist
+	git archive --prefix=Lmod-$(version)/ $(GIT_BRANCH) > Lmod-$(version).tar
+	$(RM) -rf DIST;                               			     	 \
+        mkdir DIST;                                   			     	 \
+        cd DIST;                                      			     	 \
+        tar xf ../Lmod-$(version).tar;                			     	 \
+        $(RM) ../Lmod-$(version).tar;                 			     	 \
+        echo "Lmod"-$(version) > .fname;                		     	 \
+        perl -p -i -e 's/\@git\@/$(GIT_VERSION)/g' `cat .fname`/src/Version.lua; \
+        tar chf `cat .fname`.tar `cat .fname`;           		     	 \
+        bzip2 `cat .fname`.tar;                           		     	 \
+        mv `cat .fname`.tar.bz2  ..;                         		     	 \
+        cd ..; $(RM) -rf DIST
+
+
 
 _dist: _distMkDir _distMainDir _distSrc _distSetup _distSetupZsh \
        _distVersion _distPkgs _distMF    _distContrib _distTar
@@ -227,7 +296,7 @@ _distContrib:
 	cp -r $(CONTRIB) $(DistD)/contrib
 
 _distSrc:
-	mkdir $(DistD)/src $(DistD)/tools $(DistD)/settarg $(DistD)/shells 
+	mkdir $(DistD)/src $(DistD)/tools $(DistD)/settarg $(DistD)/shells
 	cp $(lua_code) $(ComputeHashSum) $(STANDALONE_PRGM) $(DistD)/src
 	cp tools/*.lua $(DistD)/tools
 	cp $(SETTARG_SOURCE) $(DistD)/settarg
@@ -242,7 +311,7 @@ _distPkgs:
 
 _distSetup:
 	mkdir $(DistD)/init
-	cp $(SHELL_INIT) $(STARTUP) $(DistD)/init
+	cp $(SHELL_INIT) $(STARTUP) $(LMODRC_INIT) $(DistD)/init
 
 _distSetupZsh:
 	mkdir $(DistD)/init/zsh
@@ -266,6 +335,18 @@ _distTar:
 	rm -rf `cat .fname` .fname;
 
 
+ml_dist:
+	$(MAKE) DistD=DIST _ml_dist
+
+_ml_dist: _distMkDir
+	cp src/ml_cmd.in.lua ML_README.txt $(DistD)
+	echo "ml"-$(version) > .fname;                                     \
+	$(RM) -r `cat .fname` `cat .fname`.tar*;         		   \
+	mv ${DistD} `cat .fname`;                            		   \
+	tar chf `cat .fname`.tar `cat .fname`;           		   \
+	bzip2 `cat .fname`.tar;                           		   \
+	rm -rf `cat .fname` .fname;
+
 test:
 	cd rt; unset TMFuncPATH; tm .
 
@@ -274,9 +355,10 @@ tags: build_tags
 
 build_tags:
 	find . \( -regex '.*~$$\|.*/\.git\|.*/\.git/' -prune \)  \
-               -o -type f > file_list.1
+               -o -type f > file_list.1.txt
 	sed -e 's|.*/.git.*||g'                                  \
             -e 's|.*/rt/.*/t1/.*||g'                             \
+            -e 's|./rt/funny_files/mf/.*||g'                     \
             -e 's|.*/html/.*$$||g'                               \
             -e 's|./TAGS||g'                                     \
             -e 's|./makefile||g'                                 \
@@ -292,6 +374,9 @@ build_tags:
 	    -e 's|.*\.nav$$||g'                                  \
 	    -e 's|.*\.out$$||g'                                  \
 	    -e 's|.*\.pdf$$||g'                                  \
+	    -e 's|.*\.pyc$$||g'                                  \
+	    -e 's|.*db\.conf$$||g'                               \
+	    -e 's|.*\.pyo$$||g'                                  \
 	    -e 's|.*\.snm$$||g'                                  \
 	    -e 's|.*\.toc$$||g'                                  \
 	    -e 's|.*\.vrb$$||g'                                  \
@@ -304,12 +389,14 @@ build_tags:
             -e 's|.*\.used$$||g'                                 \
             -e 's|./.*\.log$$||g'                                \
             -e 's|./testreports/.*||g'                           \
+            -e 's|./docs/build/.*||g'                            \
             -e 's|./config\.status$$||g'                         \
             -e 's|.*\~$$||g'                                     \
+            -e 's|./lmod.check.txt*||g'                          \
             -e 's|./file_list\..*||g'                            \
             -e '/^\s*$$/d'                                       \
-	       < file_list.1 > file_list.2
-	etags  `cat file_list.2`
+	       < file_list.1.txt > file_list.2.txt
+	etags  `cat file_list.2.txt`
 
 
 libexec:  $(lua_code)
@@ -318,7 +405,7 @@ libexec:  $(lua_code)
 Inst_Tools: $(TOOL_SRC)
 	$(MAKE) FILELIST="$^" DIRLOC=$(DESTDIR)$(TOOLS) __installMe
 
-Inst_Shells: $(PATH_TO_SRC)/shells/*.lua
+Inst_Shells: $(srcdir)/shells/*.lua
 	$(MAKE) FILELIST="$^" DIRLOC=$(DESTDIR)$(SHELLS) __installMe
 
 Inst_Settarg: $(SETTARG_SOURCE)
@@ -330,7 +417,7 @@ Inst_Lmod_MF: $(LMOD_MF_SOURCE)
 
 clean:
 	$(RM) config.log *.o
-	cd $(PATH_TO_SRC)/pkgs; $(MAKE) LIB=$(DESTDIR)$(LIB) SHARE=$(DESTDIR)$(LIBEXEC) clean
+	cd $(srcdir)/pkgs; $(MAKE) LIB=$(DESTDIR)$(LIB) SHARE=$(DESTDIR)$(LIBEXEC) clean
 
 clobber: clean
 
@@ -348,8 +435,6 @@ world_update:
             git push --tags sf;                                                    \
         fi;                                                                        \
         rm -f /tmp/git_st_$$$$
-
-
 
 gittag:
         ifneq ($(TAG),)

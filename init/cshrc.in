@@ -37,7 +37,7 @@ if ( ! $?MODULEPATH_ROOT ) then
     #
     # If MANPATH is empty, Lmod is adding a trailing ":" so that
     # the system MANPATH will be found
-    if ( -z "$MANPATH" ) then
+    if ( ! $?MANPATH ) then
       setenv MANPATH :
     endif
     setenv MANPATH `@PKG@/libexec/addto MANPATH @PKG@/share/man`
@@ -47,3 +47,9 @@ endif
 if ( -f  @PKG@/init/csh  ) then
   source @PKG@/init/csh
 endif
+
+# Local Variables:
+# mode: shell-script
+# indent-tabs-mode: nil
+# End:
+

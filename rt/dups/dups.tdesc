@@ -1,0 +1,66 @@
+-- -*- lua -*-
+testdescript = {
+   owner   = "rtm",
+   product = "modules",
+   description = [[
+	 Test initial module load
+   ]],
+   keywords = {"dups" },
+
+   active = 1,
+   testName = "dups",
+   job_submit_method = "INTERACTIVE",
+
+   runScript = [[
+
+     . $(projectDir)/rt/common_funcs.sh
+
+     unsetMT
+     initStdEnvVars
+     MODULEPATH=$(testDir)/mf/;         export MODULEPATH
+     MODULEPATH_ROOT=$(projectDir)/mf;  export MODULEPATH_ROOT
+     LMOD_DUPLICATE_PATHS=yes;          export LMOD_DUPLICATE_PATHS
+
+     rm -fr _stderr.* _stdout.* err.* out.* .lmod.d
+
+     runLmod --version         # 1
+     runLmod load a b c        # 2
+     runLmod load d            # 3
+     runLmod unload a          # 4
+     runLmod unload b          # 5
+     runLmod unload c          # 6
+     runLmod unload d          # 7
+
+     LMOD_DUPLICATE_PATHS=no;          export LMOD_DUPLICATE_PATHS
+     runLmod load a b c        # 8
+     runLmod load d            # 9
+     runLmod unload a          #10
+     runLmod unload b          #11
+     runLmod unload c          #12
+     runLmod unload d          #13
+
+     HOME=$ORIG_HOME
+
+     cat _stdout.[0-9][0-9][0-9] > _stdout.orig
+     joinBase64Results -bash _stdout.orig _stdout.new
+     cleanUp _stdout.new out.txt
+
+     cat _stderr.[0-9][0-9][0-9] > _stderr.orig
+     cleanUp _stderr.orig err.txt
+
+     rm -f results.csv
+     wrapperDiff --csv results.csv $(testDir)/out.txt out.txt
+     wrapperDiff --csv results.csv $(testDir)/err.txt err.txt
+     testFinish -r $(resultFn) -t $(runtimeFn) results.csv
+   ]],
+
+
+   blessScript = [[
+         # perform what is needed
+   ]],
+
+   tests = {
+      { id='t1'},
+   },
+
+}

@@ -1,0 +1,69 @@
+-- -*- lua -*-
+testdescript = {
+   owner   = "rtm",
+   product = "modules",
+   description = [[
+	 Test initial module load
+   ]],
+   keywords = {"PREREQ","prereq" },
+
+   active   = 1,
+   testName = "prereq",
+   job_submit_method = "INTERACTIVE",
+
+   runScript = [[
+
+     . $(projectDir)/rt/common_funcs.sh
+
+     unsetMT
+     initStdEnvVars
+     ORIGPATH=$PATH
+     MODULEPATH=$(testDir)/mf;          export MODULEPATH
+
+     rm -fr _stderr.* _stdout.* err.* out.* .lmod.d
+
+     runLmod --version          #  1
+     runLmod load petsc         #  2
+     runLmod load slepc/3.0.0   #  3
+     runLmod unload slepc       #  4
+     runLmod unload petsc       #  5
+     runLmod load slepc         #  6
+     runLmod load petsc/2.9.0   #  7
+     runLmod load slepc         #  8
+     runLmod load slepc/2.9.0   #  9
+     runLmod load petsc/3.1.0   # 10
+     runLmod load slepc         # 11
+     runLmod unload slepc petsc # 12
+     runLmod load petsc/3.1.0   # 13
+     runLmod load slepc/2.9.0   # 14
+     runLmod load junk/1.0      # 15
+     runLmod load jdk32         # 16
+     runLmod load junk/1.0      # 17
+
+     PATH=$ORIGPATH
+     export PATH
+     HOME=$ORIG_HOME
+
+     cat _stdout.[0-9][0-9][0-9] > _stdout.orig
+     joinBase64Results -bash _stdout.orig _stdout.new
+     cleanUp _stdout.new out.txt
+
+     cat _stderr.[0-9][0-9][0-9] > _stderr.orig
+     cleanUp _stderr.orig err.txt
+
+     rm -f results.csv
+     wrapperDiff --csv results.csv $(testDir)/out.txt out.txt
+     wrapperDiff --csv results.csv $(testDir)/err.txt err.txt
+     testFinish -r $(resultFn) -t $(runtimeFn) results.csv
+   ]],
+
+
+   blessScript = [[
+         # perform what is needed
+   ]],
+
+   tests = {
+      { id='t1'},
+   },
+
+}

@@ -155,7 +155,7 @@ function M.whatis(self,s)
    local path        = moduleStack[iStack].path
    local moduleT     = moduleStack[iStack].moduleT
 
-   local i,j, key, value = s:find('^%s*([^: ]+)%s*:%s*(.*)')
+   local _,_, key, value = s:find('^%s*([^: ]+)%s*:%s*(.*)')
    local k  = KeyT[key]
    if (k) then
       moduleT[path][key] = value
@@ -168,26 +168,42 @@ function M.whatis(self,s)
    return true
 end
 
-s_pat = false
+s_patLib = false
+s_patDir = false
 --------------------------------------------------------------------------
--- Track "TACC_.*_LIB" environment variables or whatever the site is
--- called.
+-- Track "TACC_.*_LIB" and TACC_.*_DIR environment variables or whatever
+-- the site is called.
 -- @param self A MasterControl object.
 -- @param name the environment variable name.
 -- @param value the environment variable value.
 function M.setenv(self, name, value)
    dbg.start{"MC_Spider:setenv(name, value)"}
 
-   if (not s_pat) then
-      local a = {}
-      a[#a+1] = "^"
-      a[#a+1] = hook.apply("SiteName")
-      a[#a+1] = "_.*_LIB"
-      s_pat   = concatTbl(a,"")
+   if (not s_patLib) then
+      local a  = {}
+      a[#a+1]  = "^"
+      a[#a+1]  = hook.apply("SiteName")
+      a[#a+1]  = "_.*_LIB"
+      s_patLib = concatTbl(a,"")
+      a        = {}
+      a[#a+1]  = "^"
+      a[#a+1]  = hook.apply("SiteName")
+      a[#a+1]  = "_.*_DIR"
+      s_patDir = concatTbl(a,"")
+
+      local t = {patDir = s_patDir, patLib = s_patLib}
+      hook.apply("packagebasename", t)
+      s_patDir = t.patDir
+      s_patLib = t.patLib
+
+      dbg.print{"Using s_patDir: ", s_patDir, " s_patLib: ", s_patLib, "\n"}
    end
 
-   if (name:find(s_pat)) then
+   if (name:find(s_patLib)) then
       processLPATH(value)
+   end
+   if (name:find(s_patDir)) then
+      processDIR(value)
    end
    dbg.fini()
    return true
@@ -217,7 +233,7 @@ function M.append_path(self,t)
 end
 
 --------------------------------------------------------------------------
--- Always return true.
+-- Return True when in spider mode.
 -- @param self A MasterControl object.
 function M.is_spider(self)
    dbg.start{"MC_Spider:is_spider()"}

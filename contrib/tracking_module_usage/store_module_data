@@ -1,0 +1,37 @@
+#!/usr/bin/env python
+# -*- python -*-
+from __future__ import print_function
+import os, sys, re, time
+from LMODdb import LMODdb
+
+def syshost(name):
+  hostA = name.split('.')
+  idx   = 1
+  if (len(hostA) < 2):
+    idx = 0
+  return hostA[idx]
+
+def main():
+
+  ConfigBaseNm = "lmod_db"
+  ConfigFn     = ConfigBaseNm + ".conf"
+
+  lmod = LMODdb(ConfigFn)
+
+  f = open(sys.argv[1],"r")
+  for line in f:
+    line  = line.rstrip("\n")
+    idx   = line.find("ModuleUsageTracking: ")
+    dataT = dict(re.findall(r'(\S+)=(".*?"|\S+)', line[idx+6:]))
+
+    if (dataT.get('host') == None):
+      print(line)
+
+    dataT['syshost'] = syshost(dataT['host'])
+
+    lmod.data_to_db(dataT)
+
+  f.close()
+
+
+if ( __name__ == '__main__'): main()

@@ -63,6 +63,10 @@ local Version     = require("Version")
 local _concatTbl  = table.concat
 local pack        = (_VERSION == "Lua 5.1") and argsPack or table.pack
 
+--------------------------------------------------------------------------
+-- Special table concat function that knows about strings and numbers.
+-- @param aa  Input array
+-- @param sep output separator.
 local function concatTbl(aa,sep)
    if (not dbg.active()) then
       return ""
@@ -82,6 +86,9 @@ local function concatTbl(aa,sep)
    return _concatTbl(a, sep)
 end
 
+--------------------------------------------------------------------------
+-- Validate a function with only string arguments.
+-- @param cmdName The command which is getting its arguments validated.
 local function validateStringArgs(cmdName, ...)
    local arg = pack(...)
    for i = 1, arg.n do
@@ -96,6 +103,9 @@ local function validateStringArgs(cmdName, ...)
    return true
 end
 
+--------------------------------------------------------------------------
+-- Validate a function with only string table.
+-- @param cmdName The command which is getting its arguments validated.
 local function validateStringTable(n, cmdName, t)
    n = max(n,#t)
    for i = 1, n do
@@ -114,17 +124,20 @@ local function validateStringTable(n, cmdName, t)
       elseif (t.priority >= 10) then
          valid = true
       end
-      
+
       if (not valid) then
          local fn = myFileName()
          mcp:report("Syntax error in file: ",fn, "\n with command: ",
                     cmdName, " priority must be equal to or greater than 10\n")
       end
    end
-      
+
    return true
 end
 
+--------------------------------------------------------------------------
+-- Validate a function with only string module names table.
+-- @param cmdName The command which is getting its arguments validated.
 local function validateModules(cmdName, ...)
    local arg = pack(...)
    dbg.print{"cmd: ",cmdName, " arg.n: ",arg.n,"\n"}
@@ -143,13 +156,15 @@ local function validateModules(cmdName, ...)
       end
    end
    if (not allGood) then
-      local fn = myFileName()
-      mcp:report("vM: Syntax error in file: ",fn, "\n with command: \"",
+      mcp:report("vM: Syntax error in file: ",myFileName(), "\n with command: \"",
                  cmdName, "\" One or more arguments are not strings\n")
    end
    return allGood
 end
 
+--------------------------------------------------------------------------
+-- Validate a function with only string module names table.
+-- @param cmdName The command which is getting its arguments validated.
 local function validateArgsWithValue(cmdName, ...)
    local arg = pack(...)
 
@@ -175,53 +190,37 @@ end
 
 --- Load family functions ----
 
----help_topic{kind="modfuncs",
----           name="load",
----           examples="load('name'); load('name/1.2'); load(atleast('name','3.2'))",
----           descript= [[the load function loads a module via its name.  When a module
----                       is unloaded.  this command causes the module to unloaded.]]
----}
-
-
+--------------------------------------------------------------------------
+--  The load function.  It can be found in the following forms:
+-- "load('name'); load('name/1.2'); load(atleast('name','3.2'))",
 function load_module(...)
    dbg.start{"load_module(",concatTbl({...},", "),")"}
    if (not validateModules("load",...)) then return {} end
 
    dbg.print{"mcp:name(): ",mcp:name(),"\n"}
-   local b  = mcp:load_usr(MName:buildA(mcp:MNameType(),...))
+   local b  = mcp:load_usr(MName:buildA(mcp:MNameType(), ...))
    dbg.fini("load_module")
    return b
 end
 
----help_topic{kind="modfuncs",
----           name="try_load",
----           examples="try_load('name'); try_load('name/1.2'); try_load(atleast('name','3.2'))",
----           descript= [[the load function loads a module via its name.  If it doesn't
----                       exist then no error is produced. When a module is unloaded.  this
----                       command causes the module to unloaded]]
----}
-
-
-
+--------------------------------------------------------------------------
+--  The try-load function.  It can be found in the following forms:
+-- "try_load('name'); try_load('name/1.2'); try_load(atleast('name','3.2'))",
+-- The only difference between 'load' and 'try_load' is that a 'try_load'
+-- will not produce a warning if the specified modulefile(s) do not exist.
 function try_load(...)
    dbg.start{"try_load(",concatTbl({...},", "),")"}
    if (not validateModules("try_load",...)) then return {} end
 
-   local b = mcp:try_load(MName:buildA("load",...))
+   local b = mcp:try_load(MName:buildA(mcp:MNameType(), ...))
    dbg.fini("try_load")
    return b
 end
 
-try_add = try_load
-
----help_topic{kind="modfuncs",
----           name="unload",
----           examples="unload('name'); unload('name/1.2')",
----           descript= [[the unload function unloads a module via its name. No error is 
----                       produced if the module is not already loaded.  When a module is
----                       unloaded, this command does nothing.]]
----}
-
+--------------------------------------------------------------------------
+-- The unload function reads a module file and reverses all the commands
+-- in the modulefile.  It is not an error to unload a module which is
+-- not loaded.  The reverse of an unload is a no-op.
 function unload(...)
    dbg.start{"unload(",concatTbl({...},", "),")"}
    if (not validateStringArgs("unload",...)) then return {} end
@@ -232,13 +231,8 @@ function unload(...)
 end
 
 
----help_topic{kind="modfuncs",
----           name="always_load",
----           examples="always_load('name'); always_load('name/1.2'); always_load(atleast('name','3.2'))",
----           descript= [[the always_load function a module via its name. Loading a module containing
----                       this command loads,   It does nothing when unloading a module.]]
----}
-
+--------------------------------------------------------------------------
+-- This function always loads and never unloads.
 function always_load(...)
    dbg.start{"always_load(",concatTbl({...},", "),")"}
    if (not validateModules("always_load",...)) then return {} end
@@ -248,12 +242,10 @@ function always_load(...)
    return b
 end
 
----help_topic{kind="modfuncs",
----           name="always_unload",
----           examples="always_unload('name'); always_load('name/1.2')",
----           descript= [[This behaves the same as unload.]]
----}
 
+--------------------------------------------------------------------------
+-- This function always unloads and never loads. The reverse of this
+-- function is a no-op.
 function always_unload(...)
    dbg.start{"always_unload(",concatTbl({...},", "),")"}
    if (not validateStringArgs("always_unload",...)) then return {} end
@@ -262,9 +254,11 @@ function always_unload(...)
    dbg.fini("always_unload")
    return b
 end
-
---- Load/Prereq  Modify functions ---
-
+--------------------------------------------------------------------------
+-- A load and prereq modifier.  It is used like this:
+-- load(atleast("gcc","4.8"))
+-- @param m module name
+-- @param is the starting version
 function atleast(m, is)
    dbg.start{"atleast(",m,", ",is,")"}
 
@@ -274,6 +268,12 @@ function atleast(m, is)
    return mname
 end
 
+--------------------------------------------------------------------------
+-- A load and prereq modifier.  It is used like this:
+-- load(between("gcc","4.8","4.9"))
+-- @param m module name
+-- @param is the starting version
+-- @param ie the ending version.
 function between(m,is,ie)
    dbg.start{"between(",m,is,ie,")"}
 
@@ -283,7 +283,10 @@ function between(m,is,ie)
    return mname
 end
 
-function latest(m,is,ie)
+--------------------------------------------------------------------------
+-- Load the latest version available.  This will ignore defaults.
+-- @param m module name
+function latest(m)
    dbg.start{"latest(",m,")"}
 
    local mname = MName:new("load", m, "latest")
@@ -295,7 +298,8 @@ end
 
 
 --- PATH functions ---
-
+--------------------------------------------------------------------------
+-- convert arguments into a table if necessary.
 local function convert2table(...)
    local arg = pack(...)
    local t   = {}
@@ -312,6 +316,8 @@ local function convert2table(...)
    return t
 end
 
+--------------------------------------------------------------------------
+-- Prepend a value to a path like variable.
 function prepend_path(...)
    local t = convert2table(...)
    dbg.start{"prepend_path(",concatTbl(t,", "),")"}
@@ -321,6 +327,8 @@ function prepend_path(...)
    dbg.fini("prepend_path")
 end
 
+--------------------------------------------------------------------------
+-- Append a value to a path like variable.
 function append_path(...)
    local t = convert2table(...)
    dbg.start{"append_path(",concatTbl(t,", "),")"}
@@ -330,6 +338,8 @@ function append_path(...)
    dbg.fini("append_path")
 end
 
+--------------------------------------------------------------------------
+-- Remove a value from a path like variable.
 function remove_path(...)
    local t = convert2table(...)
    dbg.start{"remove_path(",concatTbl(t,", "),")"}
@@ -341,6 +351,8 @@ end
 
 --- Set Environment functions ----
 
+--------------------------------------------------------------------------
+-- Set the value of environment variable.
 function setenv(...)
    dbg.start{"setenv(",concatTbl({...},", "),")"}
    if (not validateArgsWithValue("setenv",...)) then return end
@@ -350,6 +362,8 @@ function setenv(...)
    return
 end
 
+--------------------------------------------------------------------------
+-- Unset the value of environment variable.
 function unsetenv(...)
    dbg.start{"unsetenv(",concatTbl({...},", "),")"}
    if (not validateArgsWithValue("unsetenv",...)) then return end
@@ -359,6 +373,8 @@ function unsetenv(...)
    return
 end
 
+--------------------------------------------------------------------------
+-- Set the value of environment variable and maintain a stack.
 function pushenv(...)
    dbg.start{"pushenv(",concatTbl({...},", "),")"}
    if (not validateArgsWithValue("pushenv",...)) then return end
@@ -370,6 +386,8 @@ end
 
 --- Property functions ----
 
+--------------------------------------------------------------------------
+-- Add a property to a module.
 function add_property(...)
    dbg.start{"add_property(",concatTbl({...},", "),")"}
    if (not validateStringArgs("add_property",...)) then return end
@@ -378,6 +396,8 @@ function add_property(...)
    dbg.fini("add_property")
 end
 
+--------------------------------------------------------------------------
+-- Remove a property to a module.
 function remove_property(...)
    dbg.start{"remove_property(",concatTbl({...},", "),")"}
    if (not validateStringArgs("remove_property",...)) then return end
@@ -389,6 +409,8 @@ end
 
 --- Set Alias/Shell functions ---
 
+--------------------------------------------------------------------------
+-- Set an alias for bash and csh
 function set_alias(...)
    dbg.start{"set_alias(",concatTbl({...},", "),")"}
    if (not validateArgsWithValue("set_alias",...)) then return end
@@ -397,6 +419,8 @@ function set_alias(...)
    dbg.fini("set_alias")
 end
 
+--------------------------------------------------------------------------
+-- Unset an alias for bash and csh
 function unset_alias(...)
    dbg.start{"unset_alias(",concatTbl({...},", "),")"}
    if (not validateStringArgs("unset_alias",...)) then return end
@@ -405,6 +429,8 @@ function unset_alias(...)
    dbg.fini("unset_alias")
 end
 
+--------------------------------------------------------------------------
+-- Set an shell function for bash and an alias for csh
 function set_shell_function(...)
    dbg.start{"set_shell_function(",concatTbl({...},", "),")"}
    if (not validateStringArgs("set_shell_function",...)) then return end
@@ -413,6 +439,8 @@ function set_shell_function(...)
    dbg.fini()
 end
 
+--------------------------------------------------------------------------
+-- Unset an shell function for bash and an alias for csh
 function unset_shell_function(...)
    dbg.start{"unset_shell_function(",concatTbl({...},", "),")"}
    if (not validateStringArgs("unset_shell_function",...)) then return end
@@ -423,6 +451,9 @@ end
 
 --- Prereq / Conflict ---
 
+--------------------------------------------------------------------------
+-- Test to see if a prereq module is loaded.  Fail if it is not.
+-- If more than one module is listed then it is an and condition.
 function prereq(...)
    dbg.start{"prereq(",concatTbl({...},", "),")"}
    if (not validateModules("prereq", ...)) then return end
@@ -431,6 +462,8 @@ function prereq(...)
    dbg.fini("prereq")
 end
 
+--------------------------------------------------------------------------
+-- Test to see if a conflict module is loaded.  Fail if it is loaded.
 function conflict(...)
    dbg.start{"conflict(",concatTbl({...},", "),")"}
    if (not validateStringArgs("conflict",...)) then return end
@@ -439,6 +472,9 @@ function conflict(...)
    dbg.fini()
 end
 
+--------------------------------------------------------------------------
+-- Test to see if any of prereq modules are loaded.  Fail if it is not.
+-- If more than one module is listed then it is an or condition.
 function prereq_any(...)
    dbg.start{"prereq_any(",concatTbl({...},", "),")"}
    if (not validateModules("prereq_any",...)) then return end
@@ -449,6 +485,9 @@ end
 
 --- Family function ---
 
+--------------------------------------------------------------------------
+-- This function allows only module to claim the name.  It is a
+-- generalized prereq/conflict function.
 function family(...)
    dbg.start{"family(",concatTbl({...},", "),")"}
    if (not validateStringArgs("family",...)) then return end
@@ -459,6 +498,9 @@ end
 
 --- Inherit function ---
 
+--------------------------------------------------------------------------
+-- This function finds the same named module in the MODULEPATH and
+-- loads it.
 function inherit(...)
    dbg.start{"inherit(",concatTbl({...},", "),")"}
 
@@ -468,7 +510,8 @@ end
 
 
 -- Whatis / Help functions
-
+--------------------------------------------------------------------------
+-- The whatis database function.
 function whatis(...)
    dbg.start{"whatis(",concatTbl({...},", "),")"}
    if (not validateStringArgs("whatis",...)) then return end
@@ -477,6 +520,8 @@ function whatis(...)
    dbg.fini("whatis")
 end
 
+--------------------------------------------------------------------------
+-- the help function.
 function help(...)
    dbg.start{"help(...)"}
    if (not validateStringArgs("help",...)) then return end
@@ -486,21 +531,29 @@ end
 
 -- Misc --
 
+--------------------------------------------------------------------------
+-- Report an error and quit.
 function LmodError(...)
    local b = mcp:error(...)
    return b
 end
 
+--------------------------------------------------------------------------
+-- Report a warning and continue operation.
 function LmodWarning(...)
    local b = mcp:warning(...)
    return b
 end
 
+--------------------------------------------------------------------------
+-- Print a message
 function LmodMessage(...)
    local b = mcp:message(...)
    return b
 end
 
+--------------------------------------------------------------------------
+-- Return true if in spider mode.  Use mode function instead.
 function is_spider()
    dbg.start{"is_spider()"}
    local b = mcp:is_spider()
@@ -508,6 +561,9 @@ function is_spider()
    return b
 end
 
+--------------------------------------------------------------------------
+-- Put a command in stdout so it will get executed.
+-- @param t the command table.
 function execute(t)
    dbg.start{"execute(...)"}
    if (type(t) ~= "table" or not t.cmd or type(t.modeA) ~= "table") then
@@ -521,6 +577,8 @@ function execute(t)
    return b
 end
 
+--------------------------------------------------------------------------
+-- Return the mode.
 function mode()
    dbg.start{"mode()"}
    local b = mcp:mode()
@@ -528,6 +586,9 @@ function mode()
    return b
 end
 
+--------------------------------------------------------------------------
+-- Return true if the module is loaded.
+-- @param m module name
 function isloaded(m)
    local mt   = MT:mt()
    if (not validateStringArgs("isloaded",m)) then return false end
@@ -535,6 +596,10 @@ function isloaded(m)
    return mname:isloaded()
 end
 
+
+--------------------------------------------------------------------------
+-- Return true if the module is in the pending state for a load.
+-- @param m module name
 function isPending(m)
    local mt = MT:mt()
    if (not validateStringArgs("isPending",m)) then return false end
@@ -542,38 +607,59 @@ function isPending(m)
    return mname:isPending()
 end
 
+--------------------------------------------------------------------------
+-- Return the version of Lmod.
 function LmodVersion()
    return Version.tag()
 end
 
+--------------------------------------------------------------------------
+-- Convert version to canonical so that it can be used in a comparison.
 function convertToCanonical(s)
    return parseVersion(s)
 end
 
+--------------------------------------------------------------------------
+-- Return the modules file name.
 function myFileName()
    return mcp:myFileName()
 end
 
+--------------------------------------------------------------------------
+-- Return shell that invoked Lmod.
 function myShellName()
    return mcp:myShellName()
 end
 
+--------------------------------------------------------------------------
+-- Return the full name of the module
 function myModuleFullName()
    return mcp:myModuleFullName()
 end
 
+--------------------------------------------------------------------------
+-- Return the name of the module (w/o) version.
 function myModuleName()
    return mcp:myModuleName()
 end
 
+
+--------------------------------------------------------------------------
+-- Return the name of the module that the user specified.
 function myModuleUsrName()
    return mcp:myModuleUsrName()
 end
 
+--------------------------------------------------------------------------
+-- Return the version of the module.
 function myModuleVersion()
    return mcp:myModuleVersion()
 end
 
+--------------------------------------------------------------------------
+-- Return the hierarchy based on the file name.
+-- @param pkgName the full module name
+-- @param levels the number of levels to return.
 function hierarchyA(pkgName, levels)
    local fn  = myFileName():gsub("%.lua$","")
    if (levels < 1) then
@@ -589,7 +675,7 @@ function hierarchyA(pkgName, levels)
    end
 
    fn = path_regularize(fn)
-   local j          = 0
+   j                = 0
    local numEntries = 0
    while (j) do
       j          = pkgName:find("/",j+1)
@@ -605,16 +691,29 @@ function hierarchyA(pkgName, levels)
    local b = {}
    local n = #a
 
-
-   for i = 1, levels do
+   for ia = 1, levels do
       local bb = {}
-      for j = 1, numEntries do
-         local idx = n - numEntries + j
-         bb[j] = a[idx]
+      for ja = 1, numEntries do
+         local idx = n - numEntries + ja
+         bb[ja] = a[idx]
       end
-      b[i] = _concatTbl(bb,'/')
+      b[ia] = _concatTbl(bb,'/')
       n = n - numEntries
    end
 
    return b
+end
+
+function userInGroup(group)
+   local grps   = capture("groups")
+   local found  = false
+   local userId = capture("id -u")
+   local isRoot = tonumber(userId) == 0
+   for g in grps:split("[ \n]") do
+      if (g == group or isRoot)  then
+         found = true
+         break
+      end
+   end
+   return found
 end

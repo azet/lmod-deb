@@ -1,0 +1,61 @@
+-- -*- lua -*-
+testdescript = {
+   owner   = "rtm",
+   product = "modules",
+   description = [[
+	 Test initial module load
+   ]],
+   keywords = {"show" },
+
+   active = 1,
+   testName = "show",
+   job_submit_method = "INTERACTIVE",
+
+   runScript = [[
+
+     . $(projectDir)/rt/common_funcs.sh
+     unsetMT
+     initStdEnvVars
+     MODULEPATH_ROOT=$(projectDir)/mf;  export MODULEPATH_ROOT
+     MODULEPATH=$(projectDir)/mf/Core:$(projectDir)/mf/Compiler/intel/10.1;
+     export MODULEPATH
+
+     rm -fr _stderr.*  _stdout.* out.* err.* .lmod.d
+
+     runLmod --version              # 1
+     runLmod show gcc               # 2
+     runLmod show alex              # 3
+     runLmod avail                  # 4
+     runLmod show boost             # 5
+     runLmod load boost/1.47.1      # 6
+     runLmod list                   # 7
+     runLmod show boost             # 8
+     runLmod show boost/1.49.0      # 9
+     runLmod use $(testDir)/mf/Core #10
+     runLmod show a                 #11
+
+     HOME=$ORIG_HOME
+
+     cat _stdout.[0-9][0-9][0-9] > _stdout.orig
+     joinBase64Results -bash _stdout.orig _stdout.new
+     cleanUp _stdout.new out.txt
+
+     cat _stderr.[0-9][0-9][0-9] > _stderr.orig
+     cleanUp _stderr.orig err.txt
+
+     rm -f results.csv
+     wrapperDiff --csv results.csv $(testDir)/out.txt out.txt
+     wrapperDiff --csv results.csv $(testDir)/err.txt err.txt
+     testFinish -r $(resultFn) -t $(runtimeFn) results.csv
+   ]],
+
+
+   blessScript = [[
+         # perform what is needed
+   ]],
+
+   tests = {
+      { id='t1'},
+   },
+
+}

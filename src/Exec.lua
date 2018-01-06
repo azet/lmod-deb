@@ -41,11 +41,8 @@ require("strict")
 
 
 require("utils")
-local dbg           = require("Dbg"):dbg()
-local concatTbl     = table.concat
-local getenv        = os.getenv
-
-local M = {}
+local dbg  = require("Dbg"):dbg()
+local M    = {}
 
 s_exec = false
 
@@ -75,7 +72,7 @@ end
 -- Register the command strings.
 -- @param self A Exec object
 function M.register(self, ...)
-   local arg = { n = select('#',...), ...}
+   local arg = pack(...)
    local a   = self.a
 
    for i = 1, arg.n do

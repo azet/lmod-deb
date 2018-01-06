@@ -50,6 +50,7 @@ require("capture")
 require("cmdfuncs")
 require("modfuncs")
 require("utils")
+_G._DEBUG   = false               -- Required by the new lua posix
 local posix = require("posix")
 local lfs   = require("lfs")
 
@@ -59,6 +60,7 @@ sandbox_run = false
 --------------------------------------------------------------------------
 -- Table containing valid functions for modulefiles.
 sandbox_env = {
+  loadfile = loadfile,
   require  = require,
   ipairs   = ipairs,
   next     = next,
@@ -67,7 +69,7 @@ sandbox_env = {
   tonumber = tonumber,
   tostring = tostring,
   type     = type,
-  unpack   = unpack or table.unpack,
+  unpack   = (_VERSION == "Lua 5.1") and unpack or table.unpack,
   string   = { byte = string.byte, char = string.char, find = string.find,
                format = string.format, gmatch = string.gmatch, gsub = string.gsub,
                len = string.len, lower = string.lower, match = string.match,
@@ -80,6 +82,10 @@ sandbox_env = {
                getenv = os.getenv, execute = os.execute},
 
   io       = { stderr = io.stderr, open = io.open, close = io.close, write = io.write },
+
+  package  = { cpath = package.cpath, loaded = package.loaded, loaders = package.loaders,
+               loadlib = package.loadlib, path = package.path, preload = package.preload,
+               seeall = package.seeall },
 
   ------------------------------------------------------------
   -- lmod functions
@@ -151,6 +157,8 @@ sandbox_env = {
   myModuleName         = myModuleName,
   myModuleVersion      = myModuleVersion,
   hierarchyA           = hierarchyA,
+  userInGroup          = userInGroup,
+  moduleStackTraceBack = moduleStackTraceBack,
 
   -- Normal modulefiles should not use these function(s):
   LmodSystemError      = LmodSystemError,   -- Normal Modulefiles should use
@@ -189,7 +197,7 @@ sandbox_env = {
   posix = { uname = posix.uname, setenv = posix.setenv,
             hostid = posix.hostid, open = posix.open,
             openlog = posix.openlog, closelog = posix.closelog,
-            syslog = posix.syslog, },
+            syslog = posix.syslog, stat = posix.stat},
 
   ------------------------------------------------------------
   -- Misc functions
@@ -204,11 +212,11 @@ sandbox_env = {
 }
 
 --------------------------------------------------------------------------
--- sandbox_registration(): Sites should call this function if they have
---                         functions inside their SitePackage.lua file for
---                         any functions that they want that are callable
---                         via their modulefiles.
-
+-- Sites should call this function if they have
+-- functions inside their SitePackage.lua file for
+-- any functions that they want that are callable
+-- via their modulefiles.
+-- @param t A table
 function sandbox_registration(t)
    if (type(t) ~= "table") then
       LmodError("sandbox_registration: The argument passed is: \"", type(t),
@@ -220,15 +228,12 @@ function sandbox_registration(t)
 end
 
 
---------------------------------------------------------------------------
--- sandbox_run(): Define two version: Lua 5.1 or 5.2.  It is likely that
---                The 5.2 version will be good for many new versions of
---                Lua but time will only tell.
 
+--------------------------------------------------------------------------
 -- This function is what actually "loads" a modulefile with protection
 -- against modulefiles call functions they shouldn't or syntax errors
 -- of any kind.
-
+-- @param untrusted_code A string containing lua code
 
 local function run5_1(untrusted_code)
   if untrusted_code:byte(1) == 27 then return nil, "binary bytecode prohibited" end
@@ -238,11 +243,19 @@ local function run5_1(untrusted_code)
   return pcall(untrusted_function)
 end
 
--- run code under environment [Lua 5.2]
+--------------------------------------------------------------------------
+-- This function is what actually "loads" a modulefile with protection
+-- against modulefiles call functions they shouldn't or syntax errors
+-- of any kind. This run codes under environment [Lua 5.2] or later.
+-- @param untrusted_code A string containing lua code
 local function run5_2(untrusted_code)
   local untrusted_function, message = load(untrusted_code, nil, 't', sandbox_env)
   if not untrusted_function then return nil, message end
   return pcall(untrusted_function)
 end
 
+--------------------------------------------------------------------------
+-- Define two version: Lua 5.1 or 5.2.  It is likely that
+-- The 5.2 version will be good for many new versions of
+-- Lua but time will only tell.
 sandbox_run = (_VERSION == "Lua 5.1") and run5_1 or run5_2

@@ -2,15 +2,30 @@ Source: lmod
 Section: devel
 Priority: optional
 Maintainer: Aaron Zauner <azet@azet.org>
-Build-Depends: debhelper (>= 8.0.0), autotools-dev, lua5.2, lua-filesystem, lua-posix, lua-term, lua-json
-Standards-Version: 3.9.6
+Build-Depends: autotools-dev,
+               debhelper (>= 9),
+               lua-filesystem,
+               lua-json,
+               lua-posix,
+               lua-term,
+               lua5.2,
+               procps,
+               tcl
+Standards-Version: 3.9.8
 Homepage: https://www.tacc.utexas.edu/tacc-projects/lmod
 Vcs-Git: git://github.com/azet/lmod-deb.git
 Vcs-Browser: https://github.com/azet/lmod-deb
 
 Package: lmod
 Architecture: all
-Depends: ${misc:Depends}, lua5.2, lua-filesystem, lua-posix, lua-term, lua-json
+Depends: lua-filesystem,
+         lua-json,
+         lua-posix,
+         lua-term,
+         lua5.2,
+         tcl,
+         ${misc:Depends}
+Conflicts: environment-modules
 Description: Lua based environment modules
  Lmod is a Lua based module system that easily handles the MODULEPATH
  Hierarchical problem. Environment Modules provide a convenient way to

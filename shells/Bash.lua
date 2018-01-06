@@ -54,8 +54,8 @@ Bash.my_name      = "bash"
 
 function Bash.alias(self, k, v)
    if (not v) then
-      stdout:write("unalias ",k," 2> /dev/null;\n")
-      dbg.print{   "unalias ",k," 2> /dev/null;\n"}
+      stdout:write("unalias ",k," 2> /dev/null || true;\n")
+      dbg.print{   "unalias ",k," 2> /dev/null || true;\n"}
    else
       v = v:gsub(";%s*$","")
       stdout:write("alias ",k,"='",v,"';\n")
@@ -70,8 +70,8 @@ end
 
 function Bash.shellFunc(self, k, v)
    if (not v) then
-      stdout:write("unset -f ",k," 2> /dev/null;\n")
-      dbg.print{   "unset -f ",k," 2> /dev/null;\n"}
+      stdout:write("unset -f ",k," 2> /dev/null || true;\n")
+      dbg.print{   "unset -f ",k," 2> /dev/null || true;\n"}
    else
       local func = v[1]:gsub(";%s*$","")
       stdout:write(k,"() { ",func,"; };\n")
@@ -86,7 +86,10 @@ end
 
 function Bash.expandVar(self, k, v, vType)
    local lineA       = {}
-   v                 = v:doubleQuoteString()
+   if (k:find("%.")) then
+      return
+   end
+   v                 = tostring(v):multiEscaped()
    lineA[#lineA + 1] = k
    lineA[#lineA + 1] = "="
    lineA[#lineA + 1] = v
@@ -105,9 +108,20 @@ end
 -- Bash:unset() unset an environment variable.
 
 function Bash.unset(self, k, vType)
+   if (k:find("%.")) then
+      return
+   end
    stdout:write("unset ",k,";\n")
    dbg.print{   "unset ",k,";\n"}
 end
 
+--------------------------------------------------------------------------
+-- Bash:real_shell(): Return true if the output shell is "real" or not.
+--                    This base function returns false.  Bash, Csh
+--                    and Fish should return true.
+
+function Bash.real_shell(self)
+   return true
+end
 
 return Bash

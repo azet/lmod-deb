@@ -1,0 +1,22 @@
+===========================
+step 1
+lua ProjectDIR/src/lmod.in.lua bash --regression_testing --version
+===========================
+Modules based on Lua: Version 6.0.19  2015-11-18 08:32
+    by Robert McLay mclay@tacc.utexas.edu
+===========================
+step 2
+ OutputDIR/lmod/lmod/libexec/lmod --version
+===========================
+Modules based on Lua: Version 6.0.19 (6.0.19-3-gff50a53) 2015-11-18 08:32
+    by Robert McLay mclay@tacc.utexas.edu
+===========================
+step 3
+ OutputDIR/lmod/lmod/libexec/lmod load admin
+===========================
+===========================
+step 4
+ OutputDIR/lmod/lmod/libexec/lmod list
+===========================
+Currently Loaded Modules:
+  1) admin/admin-1.0

@@ -36,6 +36,7 @@ require("strict")
 
 require("fileOps")
 
+_G._DEBUG       = false               -- Required by the new lua posix
 local dbg       = require("Dbg"):dbg()
 local base64    = require("base64")
 local concatTbl = table.concat
@@ -47,7 +48,7 @@ local posix     = require("posix")
 
 
 function argsPack(...)
-   local arg = { n = select ("#", ...), ...}
+   local arg = { n = select("#", ...), ...}
    return arg
 end
 local pack        = (_VERSION == "Lua 5.1") and argsPack or table.pack

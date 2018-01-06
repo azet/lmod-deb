@@ -43,15 +43,14 @@ require("strict")
 -- Access is the MCP mode that handles help message or whatis messages.
 -- almost all other module commands are ignored.
 
-require("strict")
+require("utils")
 
-Dbg                   = require("Dbg")
 MC_Access             = inheritsFrom(MasterControl)
 MC_Access.my_name     = "MC_Access"
 MC_Access.my_sType    = "load"
 MC_Access.my_tcl_mode = "display"
-concatTbl             = table.concat
 
+local concatTbl       = table.concat
 local A               = ShowResultsA
 local M               = MC_Access
 
@@ -69,7 +68,7 @@ end
 -- print Help message when assessT is in help mode
 -- @param self MC_Access object
 function M.help(self, ...)
-   local arg = { n = select('#', ...), ...}
+   local arg = pack(...)
    if (M.accessT.help == true) then
       for i = 1, arg.n do
          A[#A+1] = arg[i]

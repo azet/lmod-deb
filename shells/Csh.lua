@@ -78,11 +78,14 @@ end
 -- Csh:expandVar(): expand a single key-value pair into Csh syntax.
 
 function Csh.expandVar(self, k, v, vType)
+   if (k:find("%.")) then
+      return
+   end
    local lineA       = {}
    local middle      = ' '
    v                 = tostring(v)
    v                 = v:gsub("!","\\!")
-   v                 = v:doubleQuoteString()
+   v                 = v:multiEscaped()
    if (vType == "local_var") then
       lineA[#lineA + 1] = "set "
       middle            = "="
@@ -102,6 +105,9 @@ end
 -- Csh:unset(): unset a local or env. variable.
 
 function Csh.unset(self, k, vType)
+   if (k:find("%.")) then
+      return
+   end
    local lineA       = {}
    if (vType == "local_var") then
       lineA[#lineA + 1] = "unset "
@@ -113,6 +119,15 @@ function Csh.unset(self, k, vType)
    local line = concatTbl(lineA,"")
    stdout:write(line)
    dbg.print{   line}
+end
+
+--------------------------------------------------------------------------
+-- Csh:real_shell(): Return true if the output shell is "real" or not.
+--                   This base function returns false.  Bash, Csh
+--                   and Fish should return true.
+
+function Csh.real_shell(self)
+   return true
 end
 
 return Csh

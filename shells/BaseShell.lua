@@ -78,6 +78,15 @@ function M.setActive(self, active)
 end
 
 --------------------------------------------------------------------------
+-- BaseShell:real_shell(): Return true if the output shell is "real" or not.
+--                         This base function returns false.  Bash, Csh
+--                         and Fish should return true.
+
+function M.real_shell(self)
+   return false
+end
+
+--------------------------------------------------------------------------
 -- BaseShell:isActive(): Are we active.
 
 function M.isActive(self)
@@ -182,6 +191,9 @@ function M.echo(self, ...)
       local arg = pack(...)
       for i = 1, arg.n do
          local whole=arg[i]
+         if (whole:sub(-1) == "\n") then
+            whole = whole:sub(1,-2)
+         end
          for line in whole:split("\n") do
             line = line:gsub("'","'\"'\"'"):gsub(" ","' '")
             io.stdout:write("echo '",line,"';\n")
@@ -216,15 +228,19 @@ local function createShellTbl()
       local Csh          = require('Csh')
       local Bash         = require('Bash')
       local Bare         = require('Bare')
+      local Fish         = require('Fish')
       local Perl         = require('Perl')
       local Python       = require('Python')
+      local R            = require('R')
       shellTbl["sh"]     = Bash
       shellTbl["bash"]   = Bash
       shellTbl["zsh"]    = Bash
+      shellTbl["fish"]   = Fish
       shellTbl["csh"]    = Csh
       shellTbl["tcsh"]   = Csh
       shellTbl["perl"]   = Perl
       shellTbl["python"] = Python
+      shellTbl["r"]      = R
       shellTbl.bare      = Bare
       s_shellTbl         = shellTbl
    end

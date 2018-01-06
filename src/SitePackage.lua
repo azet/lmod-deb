@@ -7,22 +7,41 @@ require("strict")
 
 --------------------------------------------------------------------------------
 -- Anything in this file will automatically be loaded everytime the Lmod command
--- is run.  It is probably best that you not modify this file however.
+-- is run.  Here are two suggestions on how to use your SitePackage.lua file 
 --
--- A better approach is to create a file named "SitePackage.lua" in a different
--- directory separate from the Lmod installed directory.  Then you should modify
--- your modules.sh and modules.csh (or however you initialize the "module" command)
--- with:
---
---    (for bash, zsh, etc)
---    export LMOD_PACKAGE_PATH=/path/to/the/Site/Directory
---
---    (for csh)
---    setenv LMOD_PACKAGE_PATH /path/to/the/Site/Directory
---
--- A "SitePackage.lua" in that directory will override the one in the Lmod
--- install directory.
+-- a) Install Lmod normally and then overwrite your SitePackage.lua file over
+--    this one in the install directory.
 
+-- b) Create a file named "SitePackage.lua" in a different directory separate
+--    from the Lmod installed directory.  Then you should modify
+--    your modules.sh and modules.csh (or however you initialize the "module" command)
+--    with:
+--
+--       (for bash, zsh, etc)
+--       export LMOD_PACKAGE_PATH=/path/to/the/Site/Directory
+--
+--       (for csh)
+--       setenv LMOD_PACKAGE_PATH /path/to/the/Site/Directory
+--
+--    A "SitePackage.lua" in that directory will override the one in the Lmod
+--    install directory.
+--
+-----------------------------------------------------------------------------
+-- You should check to see that Lmod finds your SitePackage.lua.  If you do:
+-- 
+--    $ module --config
+-- 
+-- and it reports:
+-- 
+--    Modules based on Lua: Version X.Y.Z  3016-02-05 16:31
+--        by Robert McLay mclay@tacc.utexas.edu
+-- 
+--    Description                      Value
+--    -----------                      -----
+--    ...
+--    Site Pkg location                standard
+-- 
+-- Then you haven't set things up correctly.
 -----------------------------------------------------------------------------
 --  Any function here that is called by a module file must be registered with
 --  the sandbox.  For example you have following functions in your

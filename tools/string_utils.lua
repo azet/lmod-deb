@@ -30,6 +30,7 @@ require("strict")
 --
 --------------------------------------------------------------------------
 
+local concatTbl = table.concat
 
 --------------------------------------------------------------------------
 -- remove leading and trailing spaces.
@@ -40,9 +41,8 @@ function string.trim(self)
    if (ja == nil) then
       return ""
    end
-   local  jb   = self:find("%s+$") or 0
-   local  self = self:sub(ja,jb-1)
-   return self
+   local  jb = self:find("%s+$") or 0
+   return self:sub(ja,jb-1)
 end
 
 --------------------------------------------------------------------------
@@ -54,12 +54,12 @@ end
 function string.split(self, pat)
    pat  = pat or "%s+"
    local st, g = 1, self:gmatch("()("..pat..")")
-   local function getter(self, segs, seps, sep, cap1, ...)
+   local function getter(myself, segs, seps, sep, cap1, ...)
       st = sep and seps + #sep
-      return self:sub(segs, (seps or 0) - 1), cap1 or sep, ...
+      return myself:sub(segs, (seps or 0) - 1), cap1 or sep, ...
    end
-   local function splitter(self)
-      if st then return getter(self, st, g()) end
+   local function splitter(myself)
+      if st then return getter(myself, st, g()) end
    end
    return splitter, self
 end
@@ -89,10 +89,19 @@ end
 -- @param  self Input string
 -- @return A string surrounded with double quotes internal double quotes backslashed
 function string.doubleQuoteString(self)
-   if (type(self) ~= 'string') then 
+   if (type(self) ~= 'string') then
       self = tostring(self)
    else
       self = ('%q'):format(self)
+   end
+   return self
+end
+
+function string.multiEscaped(self)
+   if (type(self) ~= 'string') then
+      self = tostring(self)
+   else
+      self = '"' .. self:gsub("[\"$]","\\%1") .. '"'
    end
    return self
 end
@@ -117,11 +126,12 @@ isLua51 = _VERSION:match('5%.1$')
 -- @param  self Input string.
 -- @return escaped string.
 function string.escape(self)
-    local res = self:gsub('[%-%.%+%[%]%(%)%$%^%%%?%*]','%%%1')
-    if isLua51 then
-        res = res:gsub('%z','%%z')
-    end
-    return res
+   if (self == nil) then return nil end
+   local res = self:gsub('[%-%.%+%[%]%(%)%$%^%%%?%*]','%%%1')
+   if isLua51 then
+      res = res:gsub('%z','%%z')
+   end
+   return res
 end
 
 --------------------------------------------------------------------------

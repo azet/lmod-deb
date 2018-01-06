@@ -40,10 +40,14 @@ _module_command()
     "use:add a directory to MODULEPATH"
     "unuse:remove a directory from MODULEPATH"
     "update:reload all loaded modules"
+    "restore:load a module collection"
     "purge:unload all loaded modules"
     "refresh:refresh all non-persistent components of loaded modules"
     "whatis:display module information"
     "keyword:search for a given keyword in modules"
+    "mcc:module collection contents"
+    "collection:module collection contents"
+    "cc:module collection contents"
   )
 
   if (( CURRENT == 1 )); then
@@ -90,6 +94,30 @@ _module_available_modules()
 _module_spider_list()
 {
   _spider_list=(${$(module -q -t spider 2>&1 > /dev/null)})
+}
+
+_module_restore()
+{
+  _savelist_list=(${$(module -q -t savelist 2>&1 > /dev/null)})
+  compadd "$@" -a -- _savelist_list
+}
+
+_ml_mcc()
+{
+  _savelist_list=(${$(module -q -t savelist 2>&1 > /dev/null)})
+  compadd "$@" -a -- _savelist_list
+}
+
+_ml_collection()
+{
+  _savelist_list=(${$(module -q -t savelist 2>&1 > /dev/null)})
+  compadd "$@" -a -- _savelist_list
+}
+
+_ml_cc()
+{
+  _savelist_list=(${$(module -q -t savelist 2>&1 > /dev/null)})
+  compadd "$@" -a -- _savelist_list
 }
 
 # Completion function for help
@@ -166,6 +194,8 @@ _module_whatis()
 }
 
 _module "$@"
+
 # Local Variables:
 # mode: shell-script
+# indent-tabs-mode: nil
 # End:

@@ -38,14 +38,25 @@ require("strict")
 --------------------------------------------------------------------------
 
 require("fileOps")
+
+_G._DEBUG          = false               -- Required by the new lua posix
 local posix        = require("posix")
 local getenv       = os.getenv
 local setenv_posix = posix.setenv
+local s_validT     = {
+   no = true,
+   yes = true,
+}
 
-local function initialize(lmod_name, sed_name)
+local function initialize(lmod_name, sed_name, defaultV, validT)
+   validT      = validT or s_validT
+   defaultV    = (defaultV or "no"):lower()
    local value = (getenv(lmod_name) or sed_name):lower()
    if (value:sub(1,1) == "@") then
-      value = "no"
+      value = defaultV
+   end
+   if (not validT[value]) then
+      value = "yes"
    end
    return value
 end
@@ -55,6 +66,13 @@ end
 -- The global variables for Lmod:
 ------------------------------------------------------------------------
 
+LuaV = (_VERSION:gsub("Lua ",""))
+
+------------------------------------------------------------------------
+-- Lmod ExitHookArray Object:
+------------------------------------------------------------------------
+
+ExitHookA = require("HookArray")
 
 ------------------------------------------------------------------------
 -- Internally Lmod uses LC_ALL -> "C" so that the user environment won't
@@ -98,13 +116,28 @@ varTbl      = {}
 Cversion      = 3
 
 ------------------------------------------------------------------------
+-- LUAC_PATH : The path to luac
+------------------------------------------------------------------------
+
+LUAC_PATH = "@path_to_luac@"
+
+------------------------------------------------------------------------
+-- LMOD_CHECK_FOR_VALID_MODULE_FILES :  Should Lmod check TCL files for
+--                                      magic string "#%Module"
+------------------------------------------------------------------------
+
+LMOD_CHECK_FOR_VALID_MODULE_FILES = initialize("LMOD_CHECK_FOR_VALID_MODULE_FILES",
+                                               "@check_for_valid_module_files@",
+                                               "no")
+
+------------------------------------------------------------------------
 -- LMOD_CASE_INDEPENDENT_SORTING :  make avail and spider use case
 --                                  independent sorting.
 ------------------------------------------------------------------------
 
 
-LMOD_CASE_INDEPENDENT_SORTING = getenv("LMOD_CASE_INDEPENDENT_SORTING") or
-                                "@case_independent_sorting@"
+LMOD_CASE_INDEPENDENT_SORTING = initialize("LMOD_CASE_INDEPENDENT_SORTING",
+                                           "@case_independent_sorting@")
 
 ------------------------------------------------------------------------
 -- LMOD_REDIRECT:  Send messages to stdout instead of stderr
@@ -113,16 +146,50 @@ LMOD_REDIRECT = initialize("LMOD_REDIRECT", "@redirect@")
 
 ------------------------------------------------------------------------
 -- LMOD_SYSTEM_NAME:  When on a shared file system, use this to
---                    form the cache name and collection names.       
+--                    form the cache name and collection names.
 ------------------------------------------------------------------------
 
 LMOD_SYSTEM_NAME = getenv("LMOD_SYSTEM_NAME")
 
 ------------------------------------------------------------------------
--- LMOD_AUTO_SWAP:  Swap instead of Error 
+-- LMOD_COLUMN_TABLE_WIDTH: The width of the table when using ColumnTable
 ------------------------------------------------------------------------
 
-LMOD_AUTO_SWAP   = initialize("LMOD_AUTO_SWAP","@auto_swap@")
+LMOD_COLUMN_TABLE_WIDTH = 80
+
+------------------------------------------------------------------------
+-- LMOD_TMOD_PATH_RULE:  Using Tmod rule where if path is already there
+--                       do not prepend/append
+------------------------------------------------------------------------
+
+LMOD_TMOD_PATH_RULE = initialize("LMOD_TMOD_PATH_RULE",
+                                "@tmod_path_rule@","NO")
+
+------------------------------------------------------------------------
+-- LMOD_DISABLE_SAME_NAME_AUTOSWAP: This env. var requires users to swap
+--                  out rather than using the one name rule.
+------------------------------------------------------------------------
+
+LMOD_DISABLE_SAME_NAME_AUTOSWAP = initialize("LMOD_DISABLE_SAME_NAME_AUTOSWAP",
+                                             "@disable_name_autoswap@")
+
+--------------------------------------------------------------------------
+-- When restoring, use specified version instead of following the default
+--------------------------------------------------------------------------
+
+LMOD_PIN_VERSIONS = initialize("LMOD_PIN_VERSIONS", "@pin_versions@")
+
+------------------------------------------------------------------------
+-- LMOD_AUTO_SWAP:  Swap instead of Error
+------------------------------------------------------------------------
+
+LMOD_AUTO_SWAP   = initialize("LMOD_AUTO_SWAP","@auto_swap@","yes")
+
+------------------------------------------------------------------------
+-- LMOD_EXACT_MATCH:  Swap instead of Error
+------------------------------------------------------------------------
+
+LMOD_EXACT_MATCH   = initialize("LMOD_EXACT_MATCH","@exact_match@","no")
 
 ------------------------------------------------------------------------
 -- LMOD_AVAIL_MPATH:  Include MODULEPATH in avail search
@@ -134,29 +201,36 @@ LMOD_MPATH_AVAIL = initialize("LMOD_MPATH_AVAIL", "@mpath_avail@")
 -- LMOD_ALLOW_TCL_MFILES:  Allow Lmod to read TCL based modules.
 ------------------------------------------------------------------------
 
-LMOD_ALLOW_TCL_MFILES = getenv("LMOD_ALLOW_TCL_MFILES") or
-                        "@allow_tcl_mfiles@"
+LMOD_ALLOW_TCL_MFILES = initialize("LMOD_ALLOW_TCL_MFILES",
+                                   "@allow_tcl_mfiles@","yes")
 
 ------------------------------------------------------------------------
 -- LMOD_DUPLICATE_PATHS:  Allow the same path to be stored in PATH like
---                       vars like PATH, LD_LIBRARY_PATH, etc
+--                        vars like PATH, LD_LIBRARY_PATH, etc
 ------------------------------------------------------------------------
 
-LMOD_DUPLICATE_PATHS = getenv("LMOD_DUPLICATE_PATHS") or "@duplicate_paths@"
-   
+LMOD_DUPLICATE_PATHS = initialize("LMOD_DUPLICATE_PATHS",
+                                  "@duplicate_paths@", "no")
 
 
 LMOD_IGNORE_CACHE = getenv("LMOD_IGNORE_CACHE") or "0"
 LMOD_IGNORE_CACHE = (LMOD_IGNORE_CACHE:trim() ~= "0")
 
-
+------------------------------------------------------------------------
+-- LMOD_CACHED_LOADS: Use spider cache on loads
+------------------------------------------------------------------------
+LMOD_CACHED_LOADS = initialize("LMOD_CACHED_LOADS","@cached_loads@", "no")
+LMOD_CACHED_LOADS = LMOD_IGNORE_CACHE and "no" or LMOD_CACHED_LOADS
 
 ------------------------------------------------------------------------
 -- LMOD_PAGER: Lmod will use this value of pager if set.
 ------------------------------------------------------------------------
 
-LMOD_PAGER = getenv("LMOD_PAGER")
+LMOD_PAGER      = getenv("LMOD_PAGER") or "@path_to_pager@"
+LMOD_PAGER_OPTS = getenv("LMOD_PAGER_OPTS") or "-XqMREF"
 
+
+MODULERCFILE = getenv("MODULERCFILE") or pathJoin(cmdDir(),"../../etc/rc")
 
 ------------------------------------------------------------------------
 -- LMOD_RTM_TESTING: If set then the author is testing Lmod
@@ -164,11 +238,15 @@ LMOD_PAGER = getenv("LMOD_PAGER")
 
 LMOD_RTM_TESTING = getenv("LMOD_RTM_TESTING")
 
+------------------------------------------------------------------------
+-- LMOD_ADMIN_FILE: The Nag file.
+------------------------------------------------------------------------
+LMOD_ADMIN_FILE = getenv("LMOD_ADMIN_FILE") or pathJoin(cmdDir(),"../../etc/admin.list")
 
 ------------------------------------------------------------------------
 -- LMOD_AVAIL_STYLE: Used by the avail hook to control how avail output
 --                   is handled.   This is a colon separated list of
---                   names.  Note that the default choice is marked by 
+--                   names.  Note that the default choice is marked by
 --                   angle brackets:  A:B:<C> ==> C is the default.
 --                   If no angle brackets are specified then the first
 --                   entry is the default (i.e. A:B:C => A is default.
@@ -222,6 +300,11 @@ require("capture")
 adminT         = {}
 
 ------------------------------------------------------------------------
+-- stackTraceBackA 
+------------------------------------------------------------------------
+stackTraceBackA = {}
+
+------------------------------------------------------------------------
 -- ShowResultsA: A place where the generated module file is written to
 --               when forming a show and computing a sha1sum
 ------------------------------------------------------------------------
@@ -231,12 +314,51 @@ ShowResultsA = {}
 -- colorize:  It is a colorizer when connected to a term and plain when not
 ------------------------------------------------------------------------
 
-colorize      = false
-------------------------------------------------------------------------
--- pager:     pipe output through more when connectted to a term
-------------------------------------------------------------------------
-pager         = false
+LMOD_COLORIZE = initialize("LMOD_COLORIZE","@colorize@","yes",
+                           {yes = true, no = true, force = true})
 
+
+
+LMOD_LEGACY_VERSION_ORDERING = initialize("LMOD_LEGACY_VERSION_ORDERING",
+                                          "@legacy_ordering@","no")
+
+------------------------------------------------------------------------
+-- LMOD_TCLSH:   path to tclsh
+------------------------------------------------------------------------
+
+LMOD_TCLSH = "@tclsh@"
+if (LMOD_TCLSH:sub(1,1) == "@") then
+   LMOD_TCLSH = "tclsh"
+end
+
+------------------------------------------------------------------------
+-- LMOD_LD_LIBRARY_PATH:   LD_LIBRARY_PATH found at configure
+------------------------------------------------------------------------
+
+LMOD_LD_LIBRARY_PATH = "@sys_ld_lib_path@"
+if (LMOD_LD_LIBRARY_PATH:sub(1,1) == "@") then
+   LMOD_LD_LIBRARY_PATH = getenv("LD_LIBRARY_PATH")
+end
+if (LMOD_LD_LIBRARY_PATH == "") then
+   LMOD_LD_LIBRARY_PATH = nil
+end
+
+------------------------------------------------------------------------
+-- LMOD_LD_PRELOAD:   LD_PRELOAD found at configure
+------------------------------------------------------------------------
+
+LMOD_LD_PRELOAD = "@sys_ld_preload@"
+if (LMOD_LD_PRELOAD:sub(1,1) == "@") then
+   LMOD_LD_PRELOAD = getenv("LD_PRELOAD")
+end
+if (LMOD_LD_PRELOAD == "") then
+   LMOD_LD_PRELOAD = nil
+end
+
+------------------------------------------------------------------------
+-- parseVersion:   generate a parsable version string from version
+------------------------------------------------------------------------
+parseVersion  = false
 
 
 ------------------------------------------------------------------------
@@ -277,13 +399,6 @@ Threshold = tonumber(getenv("LMOD_THRESHOLD")) or 1
 shortLifeCache = ancient/12
 
 ------------------------------------------------------------------------
--- sysCacheDir:  The system directory location.
-------------------------------------------------------------------------
-sysCacheDirs    = getenv("LMOD_SPIDER_CACHE_DIRS") or "@cacheDirs@"
-
-
-
-------------------------------------------------------------------------
 -- USE_DOT_FILES: Use ~/.lmod.d/.cache or ~/.lmod.d/__cache__
 ------------------------------------------------------------------------
 
@@ -294,7 +409,6 @@ USE_DOT_FILES = "@use_dot_files@"
 ------------------------------------------------------------------------
 USER_CACHE_DIR_NAME  = ".cache"
 USER_SAVE_DIR_NAME   = ".save"
-USER_SBATCH_DIR_NAME = ".saveBatch"
 if ( USE_DOT_FILES:lower() == "no" ) then
   USER_CACHE_DIR_NAME  = "__cache__"
   USER_SAVE_DIR_NAME   = "__save__"
@@ -302,7 +416,6 @@ if ( USE_DOT_FILES:lower() == "no" ) then
 end
 usrCacheDir   = pathJoin(getenv("HOME"),".lmod.d",USER_CACHE_DIR_NAME)
 usrSaveDir    = pathJoin(getenv("HOME"),".lmod.d",USER_SAVE_DIR_NAME)
-usrSBatchDir  = pathJoin(getenv("HOME"),".lmod.d",USER_SBATCH_DIR_NAME)
 
 ------------------------------------------------------------------------
 -- updateSystemFn: The system file that is touched everytime the system
@@ -312,21 +425,9 @@ usrSBatchDir  = pathJoin(getenv("HOME"),".lmod.d",USER_SBATCH_DIR_NAME)
 updateSystemFn="@updateSystemFn@"
 
 ------------------------------------------------------------------------
--- s_propT:  Where the property table is stored
-------------------------------------------------------------------------
-s_propT  = {}
-
-------------------------------------------------------------------------
--- s_rcFileA: list of active RC files
-------------------------------------------------------------------------
-s_rcFileA  = {}
-
-------------------------------------------------------------------------
--- s_scDescriptT: Where the system cache descript table is stored.
-------------------------------------------------------------------------
-s_scDescriptT  = {}
-
-
+-- Prepend path block order.
+LMOD_PREPEND_BLOCK  = initialize("LMOD_PREPEND_BLOCK","@prepend_block@",
+                                 "normal")
 
 
 ------------------------------------------------------------------------
@@ -345,12 +446,16 @@ epoch_type = false
 -- Accept functions: Allow or ignore TCL mfiles
 --------------------------------------------------------------------------
 accept_fn       = false
-accept_extT     = false
 
 ------------------------------------------------------------------------
 -- allow dups function: allow for duplicate entries in PATH like vars.
 ------------------------------------------------------------------------
 allow_dups      = false
+
+------------------------------------------------------------------------
+-- prepend_order function: specify the order when prepending paths.
+------------------------------------------------------------------------
+prepend_order   = false
 
 ------------------------------------------------------------------------
 -- When building the reverseMapT use the preloaded modules

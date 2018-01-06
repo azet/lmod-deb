@@ -38,6 +38,8 @@ require("strict")
 require("TermWidth")
 require("string_utils")
 require("fileOps")
+require("myGlobals")
+_G._DEBUG       = false               -- Required by the new lua posix
 PkgBase         = require("PkgBase")
 Pkg             = PkgBase.build("Pkg")
 local concatTbl = table.concat
@@ -60,7 +62,7 @@ end
 hook.register("parse_updateFn",parse_updateFn_hook)
 
 local function site_name_hook()
-   return "TACC"
+   return LMOD_SYSTEM_NAME or "LMOD"
 end
 
 
@@ -81,11 +83,14 @@ local function msg(kind, a)
    local twidth = TermWidth()
 
    local s      = msgT[kind] or ""
-   for line in s:split("\n") do
+   if (s:len() > 0) then
+      for line in s:split("\n") do
+         a[#a+1] = "\n"
+         a[#a+1] = line:fillWords("",twidth)
+      end
       a[#a+1] = "\n"
-      a[#a+1] = line:fillWords("",twidth)
    end
-   a[#a+1] = "\n\n"
+   a[#a+1] = "\n"
    return a
 end
 

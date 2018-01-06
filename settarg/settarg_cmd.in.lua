@@ -36,16 +36,26 @@
 
 
 local LuaCommandName = arg[0]
-local i,j = LuaCommandName:find(".*/")
+local ia,ja = LuaCommandName:find(".*/")
 local LuaCommandName_dir = "./"
-if (i) then
-   LuaCommandName_dir = LuaCommandName:sub(1,j)
+if (ia) then
+   LuaCommandName_dir = LuaCommandName:sub(1,ja)
 end
 
-package.path = LuaCommandName_dir .. "../tools/?.lua;" ..
-               LuaCommandName_dir .. "?.lua;"       ..
-               LuaCommandName_dir .. "?/init.lua;"  ..
-               package.path
+local sys_lua_path = "@sys_lua_path@"
+if (sys_lua_path:sub(1,1) == "@") then
+   sys_lua_path = package.path
+end
+local sys_lua_cpath = "@sys_lua_cpath@"
+if (sys_lua_cpath:sub(1,1) == "@") then
+   sys_lua_cpath = package.cpath
+end
+
+package.path  = LuaCommandName_dir .. "../tools/?.lua;" ..
+                LuaCommandName_dir .. "?.lua;"          ..
+                LuaCommandName_dir .. "?/init.lua;"     ..
+                sys_lua_path
+package.cpath = sys_lua_cpath
 
 function cmdDir()
    return LuaCommandName_dir

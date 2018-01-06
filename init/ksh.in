@@ -1,5 +1,4 @@
 #!/bin/bash
-# -*- shell-script -*-
 
 LMOD_PKG="@PKG@"
 LMOD_DIR="@PKG@/libexec/"
@@ -9,6 +8,7 @@ export LMOD_CMD
 export LMOD_PKG
 export LMOD_DIR
 export MODULESHOME
+
 module()
 {
   eval `$LMOD_CMD bash "$@"`
@@ -31,3 +31,8 @@ ml()
 {
   eval $($LMOD_DIR/ml_cmd "$@")
 }
+
+# Local Variables:
+# mode: shell-script
+# indent-tabs-mode: nil
+# End:

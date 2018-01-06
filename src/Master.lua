@@ -55,10 +55,12 @@ require("fileOps")
 require("string_utils")
 require("loadModuleFile")
 require("utils")
+require("myGlobals")
 
+_G._DEBUG          = false               -- Required by the new lua posix
 local BeautifulTbl = require('BeautifulTbl')
 local ColumnTable  = require('ColumnTable')
-local Default      = '(D)'
+local Default      = 'D'
 local M            = {}
 local MName        = require("MName")
 local ModuleStack  = require("ModuleStack")
@@ -68,6 +70,7 @@ local Var          = require("Var")
 local dbg          = require("Dbg"):dbg()
 local hook         = require("Hook")
 local lfs          = require("lfs")
+local malias       = require("MAlias"):build()
 local posix        = require("posix")
 local pack         = (_VERSION == "Lua 5.1") and argsPack   or table.pack
 local load         = (_VERSION == "Lua 5.1") and loadstring or load
@@ -89,44 +92,6 @@ end
 local searchTbl     = {'.lua', '', '/default', '/.version'}
 local numSearch     = 4
 local numSrchLatest = 2
-
---------------------------------------------------------------------------
--- This local function is used to find a default file
--- that maybe in symbolic link chain. This returns
--- the absolute path.
--- @param path A directory path
-local function followDefault(path)
-   if (path == nil) then return nil end
-   dbg.start{"followDefault(path=\"",path,"\")"}
-   local attr = lfs.symlinkattributes(path)
-   local result = path
-   if (attr == nil) then
-      result = nil
-   elseif (attr.mode == "link") then
-      local rl = posix.readlink(path)
-      local a  = {}
-      local n  = 0
-      for s in path:split("/") do
-         n = n + 1
-         a[n] = s or ""
-      end
-
-      a[n] = ""
-      local i  = n
-      for s in rl:split("/") do
-         if (s == "..") then
-            i = i - 1
-         else
-            a[i] = s
-            i    = i + 1
-         end
-      end
-      result = concatTbl(a,"/")
-   end
-   dbg.print{"result: ",result,"\n"}
-   dbg.fini("followDefault")
-   return result
-end
 
 --------------------------------------------------------------------------
 -- This local function is very similar to
@@ -221,7 +186,7 @@ local function registerLoaded(full, fn)
 end
 
 --------------------------------------------------------------------------
--- This function marks a module name as unloaded and 
+-- This function marks a module name as unloaded and
 -- saves it to LOADEDMODULES and _LMFILES_.   This is
 -- only for compatibility with TCL/C module.
 local function registerUnloaded(full, fn)
@@ -311,7 +276,6 @@ function M.access(self, ...)
       systemG.ModuleName = full
       if (fn and isFile(fn)) then
          A[#A+1] = prtHdr()
-         dbg.print{"RTM(2) #A:",#A,"\n"}
          if (masterTbl.rawDisplay) then
             local f     = io.open(fn, "r")
             local whole = f:read("*all")
@@ -319,18 +283,18 @@ function M.access(self, ...)
             A[#A+1]     = whole
          else
             mStack:push(full, moduleName, mname:sn(), fn)
-            
+
             local mList = concatTbl(mt:list("both","active"),":")
-            
+
             loadModuleFile{file=fn,help=help, shell=shellN, mList = mList,
                         reportErr=true}
             mStack:pop()
             A[#A+1] = "\n"
-            dbg.print{"RTM(3) #A:",#A,"\n"}
          end
       else
          a[#a+1] = moduleName
       end
+      mcp:registerAdminMsg({mname})
    end
 
    shell:echo(concatTbl(A,""))
@@ -408,7 +372,6 @@ function M.load(mA)
 
    dbg.start{"Master:load(mA)"}
 
-   a   = {}
    for i  = 1,#mA do
       local mname      = mA[i]
       local moduleName = mname:usrName()
@@ -419,7 +382,25 @@ function M.load(mA)
       dbg.print{"Master:load: i: ",i,", sn: ", sn, ", fn: ", t.fn,"\n"}
       if (mt:have(sn,"active")) then
          dbg.print{"Master:load reload module: \"",moduleName,
-                   "\" as it is already loaded\n"}
+                   "\" as sn: \"",sn,"\" is already loaded\n"}
+
+         local mt_version = mt:Version(sn)
+         local mn_version = t.version
+
+         dbg.print{"mnV: ",mn_version,", mtV: ",mt_version,"\n"}
+
+         if (LMOD_DISABLE_SAME_NAME_AUTOSWAP == "yes" and mt_version ~= mn_version) then
+            LmodError("Your site prevents the automatic swapping of modules with same name.",
+                      "You must explicitly unload the loaded version of \"",sn,"\" before",
+                      "you can load the new one. Use swap (or an unload followed by a load)",
+                      "to do this:\n\n",
+                      "   $ module swap ",sn," ",moduleName,"\n\n",
+                      "Alternatively, you can set the environment variable",
+                      "LMOD_DISABLE_SAME_NAME_AUTOSWAP to \"no\" to re-enable",
+                      "same name autoswapping."
+            )
+         end
+
          local mcp_old = mcp
          mcp           = MCP
          dbg.print{"Setting mcp to ", mcp:name(),"\n"}
@@ -430,6 +411,13 @@ function M.load(mA)
          mcp           = mcp_old
          dbg.print{"Setting mcp to ", mcp:name(),"\n"}
          loaded = aa[1]
+      elseif (fn == nil and not mStack:empty()) then
+         local msg = "Executing this command requires loading \"" .. moduleName .. "\" which failed"..
+            " while processing the following module(s):\n\n"
+         msg = buildMsg(TermWidth(), msg)
+         if (haveWarnings()) then
+            stackTraceBackA[#stackTraceBackA+1] = moduleStackTraceBack(msg)
+         end
       elseif (fn) then
          dbg.print{"Master:loading: \"",moduleName,"\" from f: \"",fn,"\"\n"}
          local mList = concatTbl(mt:list("both","active"),":")
@@ -458,13 +446,13 @@ function M.load(mA)
             b[#b+1]     = {umA = umA, lmA = lmA}
          end
 
-         for i = 1,#b do
-            mcp:unload_usr(b[i].umA)
-            mcp:load(b[i].lmA)
+         local force = true
+         for j = 1,#b do
+            mcp:unload_usr(b[j].umA, force)
+            mcp:load(b[j].lmA)
          end
       end
    end
-
 
    if (M.safeToUpdate() and mt:safeToCheckZombies() and mStack:empty()) then
       dbg.print{"Master:load calling reloadAll()\n"}
@@ -673,6 +661,7 @@ end
 -- @param self A Master object
 -- @param force If true then don't reload.
 function M.reload_sticky(self, force)
+   local cwidth    = masterTbl().rt and LMOD_COLUMN_TABLE_WIDTH or TermWidth()
 
    dbg.start{"Master:reload_sticky()"}
    -- Try to reload any sticky modules.
@@ -713,14 +702,14 @@ function M.reload_sticky(self, force)
       local b  = mt:list("fullName","active")
       local a  = {}
       for i = 1, #b do
-         a[#a+1] = {"  " .. tostring(i) .. ")", b[i] }
+         a[#a+1] = {"  " .. tostring(i) .. ")", b[i].name }
       end
-      local ct = ColumnTable:new{tbl=a, gap=0}
+      local ct = ColumnTable:new{tbl=a, gap=0, width=cwidth}
       io.stderr:write(ct:build_tbl(),"\n")
    end
    if (#unstuckA > 0) then
       io.stderr:write("\nThe following sticky modules could not be reloaded:\n")
-      local ct = ColumnTable:new{tbl=unstuckA, gap=0}
+      local ct = ColumnTable:new{tbl=unstuckA, gap=0, width=cwidth}
       io.stderr:write(ct:build_tbl(),"\n")
    end
 
@@ -738,54 +727,54 @@ end
 -- @param sn The short name.
 -- @param versionA An array of versions for *sn*.
 -- @return A table describing the default.
-local function findDefault(mpath, sn, versionA)
-   dbg.start{"Master.findDefault(mpath=\"",mpath,"\", "," sn=\"",sn,"\")"}
-   local mt   = MT:mt()
-   local t    = {}
-
-   local marked   = false
-   local localDir = true
-   local path     = abspath(pathJoin(mpath,sn))
-   local default  = abspath_localdir(pathJoin(path, "default"))
-   if (not isFile(default)) then
-      marked   = true
-   else
-      local dfltA = {"/.modulerc", "/.version" }
-      local vf    = false
-      for i = 1, #dfltA do
-         local n   = dfltA[i]
-         local vFn = pathJoin(path,n)
-         if (isFile(vFn)) then
-            vf = versionFile(n, sn, vFn)
-            break;
-         end
-      end
-      if (vf) then
-         marked = true
-         default     = pathJoin(path,vf)
-         --dbg.print{"(1) f: ",f," default: ", default, "\n"}
-         if (default == nil) then
-            local fn = vf .. ".lua"
-            default  = pathJoin(path,fn)
-            dbg.print{"(2) f: ",f," default: ", default, "\n"}
-         end
-         --dbg.print{"(3) default: ", default, "\n"}
-      end
-   end
-
-   if (not default) then
-      local d, bn = splitFileName(versionA[#versionA].file)
-      default     = pathjoin(abspath(d), bn)
-   end
-   dbg.print{"default: ", default,"\n"}
-
-   t.default     = default
-   t.marked      = marked
-   t.numVersions = #versionA
-
-   dbg.fini("Master.findDefault")
-   return t
-end
+--local function findDefault(mpath, sn, versionA)
+--   dbg.start{"Master.findDefault(mpath=\"",mpath,"\", "," sn=\"",sn,"\")"}
+--   local mt   = MT:mt()
+--   local t    = {}
+--
+--   local marked   = false
+--   local localDir = true
+--   local path     = abspath(pathJoin(mpath,sn))
+--   local default  = abspath_localdir(pathJoin(path, "default"))
+--   if (not isFile(default)) then
+--      marked   = true
+--   else
+--      local dfltA = {"/.modulerc", "/.version" }
+--      local vf    = false
+--      for i = 1, #dfltA do
+--         local n   = dfltA[i]
+--         local vFn = pathJoin(path,n)
+--         if (isFile(vFn)) then
+--            vf = versionFile(n, sn, vFn)
+--            break;
+--         end
+--      end
+--      if (vf) then
+--         marked = true
+--         default     = pathJoin(path,vf)
+--         --dbg.print{"(1) f: ",f," default: ", default, "\n"}
+--         if (default == nil) then
+--            local fn = vf .. ".lua"
+--            default  = pathJoin(path,fn)
+--            dbg.print{"(2) f: ",f," default: ", default, "\n"}
+--         end
+--         --dbg.print{"(3) default: ", default, "\n"}
+--      end
+--   end
+--
+--   if (not default) then
+--      local d, bn = splitFileName(versionA[#versionA].file)
+--      default     = pathjoin(abspath(d), bn)
+--   end
+--   dbg.print{"default: ", default,"\n"}
+--
+--   t.default     = default
+--   t.marked      = marked
+--   t.numVersions = #versionA
+--
+--   dbg.fini("Master.findDefault")
+--   return t
+--end
 
 --------------------------------------------------------------------------
 -- This routine is handed a single entry.  It check to see
@@ -833,16 +822,7 @@ local function availEntry(defaultOnly, terse, label, szA, searchA, sn, name,
       end
    end
 
-   local f_orig = f
-   local d, bn  = splitFileName(f)
-   local d2     = abspath(d)
-   f            = pathJoin(d2,bn)
-   local fabs   = abspath_localdir(f)
-
-   dbg.print{"defaultOnly: ",defaultOnly, ", defaultModuleT.fn: ",defaultModuleT.fn,
-             ", f_orig: ",f_orig,", f: ", f,", d: ", d,", d2: ", d2, ", fabs: ",fabs,"\n"}
-
-   local isDefault = (defaultModuleT.fn == f_orig or defaultModuleT.fn == fabs)
+   local isDefault = (defaultModuleT.fn == f)
 
    dbg.print{"isDefault: ",isDefault, "\n"}
 
@@ -859,8 +839,9 @@ local function availEntry(defaultOnly, terse, label, szA, searchA, sn, name,
 
    local mname   = MName:new("load", name)
    local version = mname:version() or ""
-   if (hidden and version:sub(1,1) == "." or sn:sub(1,1) == ".") then
-      dbg.print{"Not printing a dot modulefile\n"}
+
+   if (hidden and (version:sub(1,1) == "." or sn:sub(1,1) == "." or sn:find("/%.") or malias:getHiddenT(name))) then
+      dbg.print{"Not printing a dot modulefile: name: ",name,"\n"}
       dbg.fini("Master:availEntry")
       return
    end
@@ -880,7 +861,6 @@ local function availEntry(defaultOnly, terse, label, szA, searchA, sn, name,
       dbg.print{"defaultModuleT.fn: ",defaultModuleT.fn,
                 ", kind: ", defaultModuleT.kind,
                 ", num: ",  defaultModuleT.num > 1,
-                ", f_orig: ", f_orig,
                 ", f: ",f,
                 "\n"}
 
@@ -891,14 +871,20 @@ local function availEntry(defaultOnly, terse, label, szA, searchA, sn, name,
          legendT[Default] = "Default Module"
       end
       dbg.print{"dflt: ",dflt,"\n"}
+      sn          = mname:sn()
       local aa    = {}
       local propT = {}
-      local sn    = mname:sn()
       local entry = dbT[sn]
       if (entry) then
          dbg.print{"Found dbT[sn]\n"}
-         if (entry[f_orig]) then
-            propT =  entry[f_orig].propT or {}
+         if (entry[f]) then
+            propT =  entry[f].propT or {}
+         end
+         local activeA = mt:list("userName","active")
+         for i = 1,#activeA do
+            if ( activeA[i].fn == f) then
+               propT["status"] = {active = 1}
+            end
          end
       else
          dbg.print{"Did not find dbT[sn]\n"}
@@ -908,7 +894,27 @@ local function availEntry(defaultOnly, terse, label, szA, searchA, sn, name,
       for i = 1,#resultA do
          aa[#aa+1] = resultA[i]
       end
-      aa[#aa + 1] = dflt
+
+      local propStr = aa[3] or ""
+      local verMapStr = malias:getMod2VersionT(name)
+      if (verMapStr) then
+         if (dflt == Default) then
+            dflt = "D:".. verMapStr
+         else
+            dflt = verMapStr
+         end
+      end
+      local bb = {}
+      if (propStr:len() > 0) then
+         bb[#bb + 1] = propStr
+      end
+      if (dflt:len() > 0) then
+         bb[#bb + 1] = dflt
+      end
+      aa[3] = concatTbl(bb,",")
+      if (aa[3]:len() > 0) then
+         aa[3] = "(".. aa[3] .. ")"
+      end
       a[#a + 1]   = aa
    end
    dbg.fini("Master:availEntry")
@@ -937,7 +943,7 @@ local function availDir(defaultOnly, terse, searchA, label, locationT, availT,
       return
    end
 
-   local cmp = (LMOD_CASE_INDEPENDENT_SORTING:lower():sub(1,1) == "y") and 
+   local cmp = (LMOD_CASE_INDEPENDENT_SORTING:lower():sub(1,1) == "y") and
                case_independent_cmp or nil
 
    for sn, versionA in pairsByKeys(availT,cmp) do
@@ -1070,7 +1076,7 @@ local function regroup_avail_blocks(availStyle, mpathA, availT)
                for iv = 1,#v do
                   vA[#vA+1] = v[iv]
                end
-               sort(vA, function(a,b) return a.parseV < b.parseV end)
+               sort(vA, function(x,y) return x.parseV < y.parseV end)
             end
          end
       end
@@ -1088,6 +1094,7 @@ function M.avail(argA)
    local mpathA    = mt:module_pathA()
    local twidth    = TermWidth()
    local masterTbl = masterTbl()
+   local cwidth    = masterTbl.rt and LMOD_COLUMN_TABLE_WIDTH or twidth
 
    local optionTbl, searchA = availOptions(argA)
    if (not masterTbl.regexp) then
@@ -1109,9 +1116,9 @@ function M.avail(argA)
          local a     = {}
          availDir(defaultOnly, terse, searchA, mpath, locationT, availT[mpath], dbT, a, legendT)
          if (next(a)) then
-            io.stderr:write(mpath,":\n")
+            shell:echo(mpath..":\n")
             for i=1,#a do
-               io.stderr:write(a[i],"\n")
+               shell:echo(a[i].."\n")
             end
          end
       end
@@ -1119,21 +1126,21 @@ function M.avail(argA)
       return
    end
 
-   local cache     = Cache:cache{quiet = masterTbl.terse}
-   local moduleT   = cache:build()
+   local moduleT  = nil
+   local cache    = Cache:cache{quiet = masterTbl.terse, buildCache=true}
+   moduleT, dbT   = cache:build()
 
    local baseMpath = mt:getBaseMPATH()
    if (not terse and (baseMpath == nil or baseMpath == '' or next(moduleT) == nil)) then
      LmodError("avail is not possible, MODULEPATH is not set or not set with valid paths.\n")
    end
 
-   local spider     = Spider:new()
-   spider:buildSpiderDB({"default"}, moduleT, dbT)
-
    local labelA     = false
    local availT     = mt:availT()
    local locationT  = mt:locationTbl()
    local availStyle = masterTbl.availStyle
+
+   malias:buildMod2VersionT()
 
    --------------------------------------------------------------------------
    -- call hook to see if site wants to relabel and re-organize avail layout
@@ -1146,11 +1153,11 @@ function M.avail(argA)
       local a     = {}
       local label = labelA[j]
       availDir(defaultOnly, terse, searchA, label, locationT, availT[label], dbT, a, legendT)
-      if (next(a)) then
+      if (next(a) ~= nil) then
          aa[#aa+1] = "\n"
          aa[#aa+1] = banner:bannerStr(label)
          aa[#aa+1] = "\n"
-         local ct  = ColumnTable:new{tbl=a, gap=1, len=length}
+         local ct  = ColumnTable:new{tbl=a, gap=1, len=length, width = cwidth}
          aa[#aa+1] = ct:build_tbl()
          aa[#aa+1] = "\n"
       end

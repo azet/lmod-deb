@@ -373,7 +373,14 @@ proc module-info {what {more {}}} {
         return $g_fullName
     }
     "specified" {
-           return $g_usrName
+        return $g_usrName
+    }
+    "version" {
+        regexp {([^/]*)/?(.*)} $more d dir rest
+        if {$rest == ""} {
+            set rest "default"
+        }
+        return "$dir/$rest"
     }
 
     default {
@@ -391,22 +398,44 @@ proc module-whatis { args } {
     }
 
     regsub -all {[\n]} $msg  " " msg2
-    puts stdout "whatis(\[\[$msg2\]\])"
+    puts stdout "whatis(\[===\[$msg2\]===\])"
 }
 
 proc setenv { var val args } {
-    global env
-    set env($var) $val
-    if {[string match $var "-respect"] || [string match $var "-r"] || [string match $var "--respect"]} {
-        set respect "true"
-        set var [lindex $args 0]
-        set val [lindex $args 1]
-        cmdargs "setenv" $var $val $respect
-    } else {
-        global g_varsT
-        set g_varsT($var) $val
-        cmdargs "setenv" $var $val
+    global env g_varsT
+    set mode [currentMode]
+
+    if {[string match "-respect" $var] || [string match "-r" $var ] || [string match "--respect" $var]} {
+	set respect "true"
+	set var [lindex $args 0]
+	set val [lindex $args 1]
+	cmdargs "setenv" $var $val $respect
+	return
     }
+    if {$mode == "load"} {
+	# set env vars in the current environment during load only
+	# Don't unset then during remove mode.
+	set env($var)     $val
+	set g_varsT($var) $val
+    }
+    cmdargs "setenv" $var $val
+}
+
+proc unsetenv { var {val {}}} {
+    global env  g_varsT
+    set mode [currentMode]
+
+    if {$mode == "load"} {
+	if {[info exists env($var)]} {
+	    unset-env $var
+	}
+    }\
+    elseif {$mode == "remove"} {
+	if {$val != ""} {
+	    set env($var) $val
+	}
+    }
+    cmdargs "unsetenv" $var $val
 }
 
 proc pushenv { var val } {
@@ -417,11 +446,16 @@ proc pushenv { var val } {
 }
 
 proc prepend-path { var val args} {
-    if {[string match $var "-delim"] || [string match $var "-d"] || [string match $var "--delim"]} {
+    if {[string match "--delim=*" $var ]} {
+        set separator [string range $var 8 end]
+        set var       $val
+        set val       [lindex $args 0]
+        set priority  [lindex $args 1]
+    } elseif {[string match "-delim" $var] || [string match "-d" $var ] || [string match "--delim" $var]} {
         set separator $val
-        set var      [lindex $args 0]
-        set val      [lindex $args 1]
-        set priority [lindex $args 2]
+        set var       [lindex $args 0]
+        set val       [lindex $args 1]
+        set priority  [lindex $args 2]
     } else {
         set priority [lindex $args 0]
         set separator ":"
@@ -431,9 +465,14 @@ proc prepend-path { var val args} {
     }
     output-path-foo "prepend_path" $var $val $separator $priority
 }
-    
+
 proc append-path { var val args} {
-    if {[string match $var "-delim"] || [string match $var "-d"] || [string match $var "--delim"]} {
+    if {[string match "--delim=*" $var ]} {
+        set separator [string range $var 8 end]
+        set var       $val
+        set val       [lindex $args 0]
+        set priority  [lindex $args 1]
+    } elseif {[string match "-delim" $var] || [string match "-d" $var] || [string match "--delim" $var]} {
         set separator $val
         set var      [lindex $args 0]
         set val      [lindex $args 1]
@@ -442,14 +481,19 @@ proc append-path { var val args} {
         set priority [lindex $args 0]
         set separator ":"
     }
-    if {[ string match $priority ""]} {
+    if {[ string match "" $priority]} {
         set priority 0
     }
     output-path-foo "append_path" $var $val $separator $priority
 }
-    
+
 proc remove-path { var val args} {
-    if {[string match $var "-delim"] || [string match $var "-d"] || [string match $var "--delim"]} {
+    if {[string match "--delim=*" $var ]} {
+        set separator [string range $var 8 end]
+        set var       $val
+        set val       [lindex $args 0]
+        set priority  [lindex $args 1]
+    } elseif {[string match "-delim" $var] || [string match "-d" $var] || [string match "--delim" $var]} {
         set separator $val
         set var      [lindex $args 0]
         set val      [lindex $args 1]
@@ -458,12 +502,12 @@ proc remove-path { var val args} {
         set priority [lindex $args 0]
         set separator ":"
     }
-    if {[ string match $priority ""]} {
+    if {[ string match "" $priority]} {
         set priority 0
     }
     output-path-foo "remove_path" $var $val $separator $priority
 }
-    
+
 proc output-path-foo { cmd var val separator priority } {
     puts stdout "$cmd\{\"$var\",\"$val\",delim=\"$separator\",priority=\"$priority\"\}"
 }
@@ -491,8 +535,10 @@ proc doubleQuoteEscaped {text} {
 
 proc cmdargs { cmd args } {
     foreach arg $args {
-	set val [doubleQuoteEscaped $arg]
-        lappend cmdArgsL "\"$val\""
+	#if {$arg != ""} {
+	    set val [doubleQuoteEscaped $arg]
+	    lappend cmdArgsL "\"$val\""
+	#}
     }
     set cmdArgs [join $cmdArgsL ","]
     puts stdout "$cmd\($cmdArgs\)"
@@ -504,6 +550,14 @@ proc family { var } {
 
 proc loadcmd { args } {
     eval cmdargs "load" $args
+}
+
+proc swapcmd { old {new {}}} {
+    if {$new == ""} {
+	set new $old
+    }
+    eval cmdargs "unload" $old
+    eval cmdargs "load"   $new
 }
 
 proc system { args } {
@@ -526,7 +580,7 @@ proc unload { args } {
     eval cmdargs $cmdName $args
 }
 proc prereq { args } {
-    eval cmdargs "prereq" $args
+    eval cmdargs "prereq_any" $args
 }
 proc prereq-any { args } {
     eval cmdargs "prereq_any" $args
@@ -599,7 +653,7 @@ proc myPuts args {
     if {$putMode != "inHelp"} {
         if { ($channel == "stdout") || ($channel == "stderr") } {
             set channel "stdout"
-            set text "LmodMessage(\[\[$text\]\])"
+            set text "LmodMessage(\[===\[$text\]===\])"
         }
     } else {
         set channel  "stdout"
@@ -609,7 +663,7 @@ proc myPuts args {
     } else {
         puts $channel $text
     }
-        
+
 }
 
 proc uname {what} {
@@ -656,6 +710,10 @@ proc module { command args } {
         load {
             eval loadcmd $args
         }
+	switch -
+	swap {
+	    eval swapcmd $args
+	}
         add {
             eval loadcmd $args
         }
@@ -683,7 +741,7 @@ proc module { command args } {
 
 proc reportError {message} {
     global ModulesCurrentModulefile g_fullName
-    puts stdout "LmodError(\[\[$ModulesCurrentModulefile: ($g_fullName): $message\]\])"
+    puts stdout "LmodError(\[===\[$ModulesCurrentModulefile: ($g_fullName): $message\]===\])"
 }
 
 proc execute-modulefile {modfile } {
@@ -729,8 +787,8 @@ proc execute-modulefile {modfile } {
     set errorVal [interp eval $slave {
 	set sourceFailed [catch {source $ModulesCurrentModulefile } errorMsg]
         if { $g_help && [info procs "ModulesHelp"] == "ModulesHelp" } {
-            set start "help(\[\["
-            set end   "\]\])"
+            set start "help(\[===\["
+            set end   "\]===\])"
             setPutMode "inHelp"
             puts stdout $start
 	    catch { ModulesHelp } errMsg
@@ -744,6 +802,14 @@ proc execute-modulefile {modfile } {
     }]
     interp delete $slave
     return $errorVal
+}
+
+proc unset-env {var} {
+    global env
+
+    if {[info exists env($var)]} {
+	unset env($var)
+    }
 }
 
 proc main { modfile } {
@@ -761,6 +827,8 @@ set options {
             {f.arg   "???"  "module full name"}
             {m.arg   "load" "mode: load remove display"}
             {s.arg   "bash" "shell name"}
+            {L.arg   "???"  "LD_LIBRARY_PATH"}
+            {P.arg   "???"  "LD_PRELOAD"}
             {u.arg   "???"  "module specified name"}
 }
 
@@ -776,4 +844,10 @@ set g_fullName  $params(f)
 set g_usrName   $params(u)
 set g_shellName $params(s)
 set g_mode      $params(m)
+if {[lsearch $argv "-L"] >= 0} {
+    set env("LD_LIBRARY_PATH")  $params(L)
+}
+if {[lsearch $argv "-P"] >= 0} {
+    set env("LD_PRELOAD")  $params(P)
+}
 eval main $argv

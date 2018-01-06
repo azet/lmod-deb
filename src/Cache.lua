@@ -66,19 +66,22 @@ require("string_utils")
 require("fileOps")
 require("cmdfuncs")
 require("utils")
+require("lmod_system_execute")
 
-
-
-local CTimer  = require("CTimer")
-local dbg     = require("Dbg"):dbg()
-local M       = {}
-local MT      = require("MT")
-local Spider  = require("Spider")
-local hook    = require("Hook")
-local lfs     = require("lfs")
-local posix   = require("posix")
-local s_cache = false
-local timer   = require("Timer"):timer()
+_G.maliasT       = {}
+local CTimer     = require("CTimer")
+local ReadLmodRC = require('ReadLmodRC')
+local dbg        = require("Dbg"):dbg()
+local M          = {}
+local MT         = require("MT")
+local Spider     = require("Spider")
+local hook       = require("Hook")
+local lfs        = require("lfs")
+local malias     = require("MAlias"):build()
+local posix      = require("posix")
+local s_cache    = false
+local timer      = require("Timer"):timer()
+local concatTbl  = table.concat
 
 --------------------------------------------------------------------------
 -- This singleton construct reads the scDescriptT table that can be
@@ -96,13 +99,23 @@ local function new(self, t)
 
    dbg.start{"Cache:new()"}
 
-   scDescriptT = getSCDescriptT()
+   local readLmodRC  = ReadLmodRC:singleton()
+   local scDescriptT = readLmodRC:scDescriptT()
 
    local scDirA = {}
 
    local systemEpoch = epoch() - ancient
 
    dbg.print{"#scDescriptT: ",#scDescriptT, "\n"}
+   local CLuaV = 0
+   for s in LuaV:split("%.") do
+      CLuaV = CLuaV*1000+tonumber(s)
+   end
+   CLuaV  = tostring(CLuaV)
+
+
+   local compiled_ext_sys = "luac_"..LuaV
+   local compiled_ext_usr = "luac_"..CLuaV
    for j  = 1, #scDescriptT  do
       local entry = scDescriptT[j]
       local tt    = {}
@@ -123,38 +136,49 @@ local function new(self, t)
          if (attr.mode == "directory") then
             dbg.print{"Adding: dir: ",dir,", timestamp: ",lastUpdate, "\n"}
             scDirA[#scDirA+1] =
-               { file   = pathJoin(dir, "moduleT.lua"),     fileT = "system",
-                 backup = pathJoin(dir, "moduleT.old.lua"),
+               { fileA = { pathJoin(dir, "moduleT."     .. compiled_ext_sys),
+                           pathJoin(dir, "moduleT.old." .. compiled_ext_sys),
+                           pathJoin(dir, "moduleT.lua"),
+                           pathJoin(dir, "moduleT.old.lua"),
+                         },
                  timestamp = lastUpdate,
+                 fileT = "system",
                }
             break
          end
       end
    end
 
-   local usrModuleT = hook.apply("groupName","moduleT.lua")
+   local usrModuleT   = hook.apply("groupName","moduleT.lua")
+   local usrModuleT_C = hook.apply("groupName","moduleT."..compiled_ext_usr)
 
-   local usrCacheDirA = {
-      { file = pathJoin(usrCacheDir, usrModuleT), fileT = "your",
-        timestamp = systemEpoch
-      },
-      { file = pathJoin(usrCacheDir, "moduleT.lua"), fileT = "your",
+   local usrModuleTFnA = {
+      { fileA = { pathJoin(usrCacheDir, usrModuleT_C),
+                  pathJoin(usrCacheDir, usrModuleT),
+                  pathJoin(usrCacheDir, "moduleT."..compiled_ext_usr),
+                  pathJoin(usrCacheDir, "moduleT.lua"),
+                },
+        fileT = "your",
         timestamp = systemEpoch
       },
    }
 
-   t              = t or {}
-   o.moduleDirT   = {}
-   o.mDT          = {}
-   o.usrCacheDir  = usrCacheDir
-   o.usrCacheDirA = usrCacheDirA
-   o.usrModuleTFN = pathJoin(usrCacheDir,usrModuleT)
-   o.systemDirA   = scDirA
-   o.dontWrite    = t.dontWrite or false
-   o.quiet        = t.quiet     or false
+   t                   = t or {}
+   o.moduleDirT        = {}
+   o.mDT               = {}
+   o.usrCacheDir       = usrCacheDir
+   o.usrCacheInvalidFn = pathJoin(usrCacheDir,"invalidated")
+   o.usrModuleTFnA     = usrModuleTFnA
+   o.usrModuleTFN      = pathJoin(usrCacheDir,usrModuleT)
+   o.systemDirA        = scDirA
+   --o.dbTDirA         = dbDirA
+   o.dontWrite         = t.dontWrite or false
+   o.buildCache        = false
+   o.quiet             = t.quiet     or false
 
-   o.moduleT      = {}
-   o.moduleDirA   = {}
+   o.dbT               = {}
+   o.moduleT           = {}
+   o.moduleDirA        = {}
    dbg.fini("Cache.new")
    return o
 end
@@ -171,11 +195,18 @@ end
 -- @return A singleton Cache object.
 function M.cache(self, t)
    dbg.start{"Cache:cache()"}
+
    if (not s_cache) then
       s_cache   = new(self, t)
    end
 
-   s_cache.quiet    = (t or {}).quiet or s_cache.quiet
+   t                = t or {}
+   s_cache.quiet    = t.quiet or s_cache.quiet
+   if (t.buildCache) then
+      s_cache.buildCache = t.buildCache
+   end
+
+   dbg.print{"s_cache.buildCache: ",self.buildCache,"\n"}
 
    local mt        = MT:mt()
    local baseMpath = mt:getBaseMPATH()
@@ -203,10 +234,10 @@ end
 -- finds a cache file is simply does a "loadfile" on it
 -- and updates moduleT and moduleDirT.
 -- @param self a Cache object
--- @param cacheFileA An array of cache files to read and process.
+-- @param moduleTFnA An array of cache files to read and process.
 -- @return the number of directories read.
-local function readCacheFile(self, cacheFileA)
-   dbg.start{"Cache:readCacheFile(cacheFileA)"}
+local function readCacheFile(self, moduleTFnA)
+   dbg.start{"Cache:readCacheFile(moduleTFnA)"}
    local dirsRead  = 0
    if (masterTbl().ignoreCache or LMOD_IGNORE_CACHE) then
       dbg.print{"LMOD_IGNORE_CACHE is true\n"}
@@ -214,42 +245,46 @@ local function readCacheFile(self, cacheFileA)
       return dirsRead
    end
 
-   local mt         = MT:mt()
-
    local moduleDirT = self.moduleDirT
    local mDT        = self.mDT
-   local moduleDirA = self.moduleDirA
    local moduleT    = self.moduleT
 
-   dbg.print{"#cacheFileA: ",#cacheFileA,"\n"}
-   for i = 1,#cacheFileA do
-      local f     = cacheFileA[i].file
-      local found = false
+   dbg.print{"#moduleTFnA: ",#moduleTFnA,"\n"}
 
-      local attr = lfs.attributes(f) or {}
-      if (next(attr) ~= nil and attr.size > 0) then
-         found = true
-      elseif (cacheFileA[i].backup) then
-         f     = cacheFileA[i].backup
-         attr  = lfs.attributes(f) or {}
-         found = (next(attr) ~= nil and attr.size > 0)
-      end
+   for i = 1,#moduleTFnA do
+      repeat
+         local fileA = moduleTFnA[i].fileA
+         local fn    = false
+         local found = false
+         local attr  = false
 
-      if (not found) then
-         dbg.print{"Did not find: ",f,"\n"}
-      else
-         dbg.print{"cacheFile found: ",f,"\n"}
+         for j = 1,#fileA do
+            fn   = fileA[j]
+            attr = lfs.attributes(fn) or {}
+            if (next(attr) ~= nil and attr.size > 0) then
+               found = true
+               break
+            else
+               dbg.print{"Did not find: ",fn,"\n"}
+            end
+         end
+
+         if (not found) then
+            dbg.print{"No cache files found in", moduleDirT, "\n"}
+            break
+         end
+
+         dbg.print{"cacheFile found: ",fn,"\n"}
 
          -- Check Time
 
-         local diff         = attr.modification - cacheFileA[i].timestamp
-         dbg.print{"timeDiff: ",diff,"\n"}
-
-         -- Read in cache file if not out of date.
-         if (diff >= 0) then
+         local diff  = attr.modification - moduleTFnA[i].timestamp
+         local valid = diff >= 0
+         dbg.print{"valid: ",valid,", timeDiff: ",diff,"\n"}
+         if (valid) then
 
             -- Check for matching default MODULEPATH.
-            assert(loadfile(f))()
+            assert(loadfile(fn))()
 
             local version = (rawget(_G,"moduleT") or {}).version or 0
 
@@ -257,6 +292,9 @@ local function readCacheFile(self, cacheFileA)
             if (version < Cversion) then
                dbg.print{"Ignoring old style cache file!\n"}
             else
+               dbg.print{"importing maliasT\n"}
+               malias:import(_G.maliasT)
+               dbg.print{"importing moduleT\n"}
                local G_moduleT = _G.moduleT
                for k, v in pairs(G_moduleT) do
                   dbg.print{"moduleT dir: ", k,"\n"}
@@ -264,7 +302,7 @@ local function readCacheFile(self, cacheFileA)
                      local dirTime = mDT[k] or 0
                      if (mDT[k] and attr.modification > dirTime) then
                         k             = path_regularize(k)
-                        dbg.print{"saving directory: ",k," from cache file: ",f,"\n"}
+                        dbg.print{"saving directory: ",k," from cache file: ",fn,"\n"}
                         mDT[k]        = attr.modification
                         moduleDirT[k] = true
                         moduleT[k]    = v
@@ -276,12 +314,13 @@ local function readCacheFile(self, cacheFileA)
                end
             end
          end
-      end
+      until true
    end
 
    dbg.fini("Cache:readCacheFile")
    return dirsRead
 end
+
 
 --------------------------------------------------------------------------
 -- This is the client code interface to getting the cache
@@ -316,11 +355,25 @@ end
 -- @param fast if true then only read cache files, do not build them.
 function M.build(self, fast)
    dbg.start{"Cache:build(fast=", fast,")"}
+   local moduleT = self.moduleT
+   local dbT     = self.dbT
+   local spider  = Spider:new()
+
+   dbg.print{"self.buildCache: ",self.buildCache,"\n"}
+   if (not self.buildCache) then
+      dbg.fini("Cache:build")
+      return false, false
+   end
+
+   if (next(moduleT) ~= nil) then
+      dbg.print{"Using pre-built moduleT!\n"}
+      dbg.fini("Cache:build")
+      return moduleT, dbT
+   end
+
    local Pairs = dbg.active() and pairsByKeys or pairs
    local mt = MT:mt()
    local masterTbl = masterTbl()
-
-
    local T1 = epoch()
    local sysDirsRead = 0
    if (not masterTbl.checkSyntax) then
@@ -331,7 +384,10 @@ function M.build(self, fast)
    -- Read user cache file if it exists and is not out-of-date.
 
    local moduleDirT  = self.moduleDirT
-   local usrDirsRead = readCacheFile(self, self.usrCacheDirA)
+   local usrDirsRead = 0
+   if (not isFile(self.usrCacheInvalidFn))then
+      usrDirsRead = readCacheFile(self, self.usrModuleTFnA)
+   end
 
    local dirA   = {}
    local numMDT = 0
@@ -353,7 +409,6 @@ function M.build(self, fast)
    local userModuleTFN = self.usrModuleTFN
    local buildModuleT  = (#dirA > 0)
    local userModuleT   = {}
-   local moduleT       = self.moduleT
    dbg.print{"buildModuleT: ",buildModuleT,"\n"}
 
    dbg.print{"mt: ", tostring(mt), "\n",level=2}
@@ -378,8 +433,6 @@ function M.build(self, fast)
       local mcp_old = mcp
       mcp           = MasterControl.build("spider")
 
-      local spider  = Spider:new()
-
       local t1      = epoch()
       local st, msg = pcall(Spider.findAllModules, spider, dirA, userModuleT)
       if (not st) then
@@ -389,7 +442,7 @@ function M.build(self, fast)
       local t2      = epoch()
 
       mcp           = mcp_old
-      dbg.print{"Setting mpc to ", mcp:name(),"\n"}
+      dbg.print{"Setting mcp to ", mcp:name(),"\n"}
 
       dbg.print{"t2-t1: ",t2-t1, " shortTime: ", shortTime, "\n", level=2}
 
@@ -401,7 +454,7 @@ function M.build(self, fast)
 
       local dontWrite = self.dontWrite or r.dontWriteCache or LMOD_IGNORE_CACHE
 
-      local doneMsg = " done."
+      local doneMsg
 
       if (t2 - t1 < shortTime or dontWrite) then
          ancient = shortLifeCache
@@ -427,16 +480,34 @@ function M.build(self, fast)
          mkdir_recursive(self.usrCacheDir)
          local s0 = "-- Date: " .. os.date("%c",os.time()) .. "\n"
          local s1 = "ancient = " .. tostring(math.floor(ancient)) .."\n"
-         local s2 = serializeTbl{name="moduleT",      value=userModuleT,
-                                 indent=true}
+         local s2 = malias:export()
+         local s3 = serializeTbl{name="moduleT",      value=userModuleT, indent=true}
          os.rename(userModuleTFN, userModuleTFN .. "~")
          local f  = io.open(userModuleTFN,"w")
          if (f) then
-            f:write(s0,s1,s2)
+            f:write(s0,s1,s2,s3)
             f:close()
          end
          posix.unlink(userModuleTFN .. "~")
          dbg.print{"Wrote: ",userModuleTFN,"\n"}
+         if (LUAC_PATH ~= "") then
+            if (LUAC_PATH:sub(1,1) == "@") then
+               LUAC_PATH="luac"
+            end
+            local ext = ".luac_"..LuaV
+            local fn = userModuleTFN:gsub(".lua$",ext)
+            local a  = {}
+            a[#a+1]  = LUAC_PATH
+            a[#a+1]  = "-o"
+            a[#a+1]  = fn
+            a[#a+1]  = userModuleTFN
+            lmod_system_execute(concatTbl(a," "))
+         end
+         if (isFile(self.usrCacheInvalidFn)) then
+            dbg.print{"unlinking: ",self.usrCacheInvalidFn,"\n"}
+            posix.unlink(self.usrCacheInvalidFn)
+         end
+
          local buildT   = t2-t1
          local ancient2 = math.min(buildT * 120, ancient)
 
@@ -446,7 +517,7 @@ function M.build(self, fast)
       end
       cTimer:done(doneMsg)
       dbg.print{"Transfer from userModuleT to moduleT\n"}
-      for k, v in Pairs(userModuleT) do
+      for k in Pairs(userModuleT) do
          dbg.print{"k: ",k,"\n"}
          moduleT[k] = userModuleT[k]
       end
@@ -456,6 +527,13 @@ function M.build(self, fast)
          local k = dirA[i]
          moduleDirT[k] = t2
       end
+
+   end
+
+
+   -- With a valid moduleT build dbT if necessary:
+   if (next(dbT) == nil or buildModuleT) then
+      spider:buildSpiderDB({"default"}, moduleT, dbT)
    end
 
    -- remove user cache file if old
@@ -472,7 +550,7 @@ function M.build(self, fast)
    mt:clearLocationAvailT()
 
    dbg.fini("Cache:build")
-   return moduleT
+   return moduleT, dbT
 end
 
 return M

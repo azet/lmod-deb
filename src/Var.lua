@@ -8,45 +8,6 @@
 -- The other point of this class is to check to see when MODULEPATH
 -- has changed.
 --
--- @classmod Var
-
-require("strict")
-
---------------------------------------------------------------------------
--- Lmod License
---------------------------------------------------------------------------
---
---  Lmod is licensed under the terms of the MIT license reproduced below.
---  This means that Lmod is free software and can be used for both academic
---  and commercial purposes at absolutely no cost.
---
---  ----------------------------------------------------------------------
---
---  Copyright (C) 2008-2014 Robert McLay
---
---  Permission is hereby granted, free of charge, to any person obtaining
---  a copy of this software and associated documentation files (the
---  "Software"), to deal in the Software without restriction, including
---  without limitation the rights to use, copy, modify, merge, publish,
---  distribute, sublicense, and/or sell copies of the Software, and to
---  permit persons to whom the Software is furnished to do so, subject
---  to the following conditions:
---
---  The above copyright notice and this permission notice shall be
---  included in all copies or substantial portions of the Software.
---
---  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
---  EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
---  OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
---  NONINFRINGEMENT.  IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
---  BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
---  ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
---  CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
---  THE SOFTWARE.
---
---------------------------------------------------------------------------
-
-
 --------------------------------------------------------------------------
 -- PATH Variables:
 --------------------------------------------------------------------------
@@ -85,28 +46,79 @@ require("strict")
 -- This way prepend will always work as a push even when append and remove
 -- do not allow duplicates.  Then the Var:pop() member function will work
 -- correctly independent of site policy towards duplicates
+--
+-- @classmod Var
+
+require("strict")
+
+--------------------------------------------------------------------------
+-- Lmod License
+--------------------------------------------------------------------------
+--
+--  Lmod is licensed under the terms of the MIT license reproduced below.
+--  This means that Lmod is free software and can be used for both academic
+--  and commercial purposes at absolutely no cost.
+--
+--  ----------------------------------------------------------------------
+--
+--  Copyright (C) 2008-2014 Robert McLay
+--
+--  Permission is hereby granted, free of charge, to any person obtaining
+--  a copy of this software and associated documentation files (the
+--  "Software"), to deal in the Software without restriction, including
+--  without limitation the rights to use, copy, modify, merge, publish,
+--  distribute, sublicense, and/or sell copies of the Software, and to
+--  permit persons to whom the Software is furnished to do so, subject
+--  to the following conditions:
+--
+--  The above copyright notice and this permission notice shall be
+--  included in all copies or substantial portions of the Software.
+--
+--  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+--  EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+--  OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+--  NONINFRINGEMENT.  IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+--  BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+--  ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+--  CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+--  THE SOFTWARE.
+--
+--------------------------------------------------------------------------
 
 require("string_utils")
 require("pairsByKeys")
 require("utils")
+_G._DEBUG           = false               -- Required by the new lua posix
 local abs           = math.abs
 local ceil          = math.ceil
 local dbg           = require("Dbg"):dbg()
 local ModulePath    = ModulePath
 local concatTbl     = table.concat
 local getenv        = os.getenv
+local log           = math.log
 local min           = math.min
 local max           = math.max
-local pow           = math.pow
-local log10         = math.log10
 local huge          = math.huge
 local posix         = require("posix")
 local setenv_posix  = posix.setenv
 local systemG       = _G
 local envPrtyName   = "__LMOD_PRIORITY_"
+local ln10_inv      = 1.0/log(10.0)
 
 local M = {}
 
+
+--------------------------------------------------------------------------
+-- Rebuild the path-like priority table.  So for a PATH with priorities
+-- would have:
+--     __LMOD_PRIORITY_PATH=/a/b/c:-100;/d/e/f:-1000
+-- The entries are separated by semicolons and the key-value pairs
+-- are separated by colons.  The results are a table:
+--
+--     t['/a/b/c'] =  -100
+--     t['/d/e/f'] = -1000
+--
+-- @param self A Var object.
 local function build_priorityT(self)
    local value   = getenv(envPrtyName .. self.name)
    if (value == nil) then
@@ -133,12 +145,11 @@ end
 
 
 --------------------------------------------------------------------------
--- extract(): The ctor uses this routine to initialize the variable to be
---            the value from the environment. This routine assumes that
---            all variables are path like variables here.  Not to worry
---            however, the set function mark the type as "var" and not
---            "path".  Other functions work similarly.
-
+-- The ctor uses this routine to initialize the variable to be
+-- the value from the environment. This routine assumes that
+-- all variables are path like variables here.  Not to worry
+-- however, the set function mark the type as "var" and not
+-- "path".  Other functions work similarly.
 local function extract(self)
    local myValue   = self.value or getenv(self.name)
    local pathTbl   = {}
@@ -172,9 +183,12 @@ local function extract(self)
 end
 
 --------------------------------------------------------------------------
--- Var:new():  The ctor for this class.  It uses extract to build its
---             initial value from the environment.
-
+-- The ctor for this class.  It uses extract to build its
+-- initial value from the environment.
+-- @param self A Var object.
+-- @param name The name of the variable.
+-- @param value The value assigned to the variable.
+-- @param sep The separator character.  (By default it is ":")
 function M.new(self, name, value, sep)
    local o = {}
    setmetatable(o,self)
@@ -189,14 +203,19 @@ function M.new(self, name, value, sep)
 end
 
 --------------------------------------------------------------------------
--- Var:prt() This member function is here just when debugging.
-
+-- This member function is here just when debugging.
+-- @param self A Var object.
+-- @param title A Descriptive title.
 function M.prt(self,title)
    dbg.start{"Var:prt(",title,")"}
    dbg.print{"name:  \"", self.name, "\"\n"}
-   dbg.print{"imin:  \"", self.imin, "\"\n"}
-   dbg.print{"imax:  \"", self.imax, "\"\n"}
-   dbg.print{"value: \"", self.value,"\"\n"}
+   dbg.print{"imin:  ",   self.imin, "\n"}
+   dbg.print{"imax:  ",   self.imax, "\n"}
+   local v = self.value
+   if (type(self.value) == "string") then
+      v = "\"" .. self.value .. "\""
+   end
+   dbg.print{"value: ", v, "\n"}
    if (not self.tbl or type(self.tbl) ~= "table" or next(self.tbl) == nil) then
       dbg.print{"tbl is empty\n"}
       dbg.fini ("Var:prt")
@@ -215,9 +234,11 @@ function M.prt(self,title)
 end
 
 --------------------------------------------------------------------------
--- chkMP(): This function is called to let Lmod know that the MODULEPATH
---          has changed.
-
+-- This function is called to let Lmod know that the MODULEPATH
+-- has changed.
+-- @param name The variable name
+-- @param adding True if adding to path.
+-- @param pathEntry The new value.
 local function chkMP(name, adding, pathEntry)
    if (name == ModulePath) then
       dbg.print{"calling reEvalModulePath()\n"}
@@ -229,20 +250,17 @@ local function chkMP(name, adding, pathEntry)
 end
 
 --------------------------------------------------------------------------
---  The following three local functions implement the dup/no_dup
---  functionality:
---     removeAll():   no dups allowed
---     removeFirst(): dups allowed, called when reversing prepend_path
---     removeLast():  dups allowed, called when reversing append_path
-
-
-local function remFunc(a, where, priority)
+--  This handles removing entries from a path like variable.
+--  @param a An array of values.
+--  @param where Where to remove and how: {"first", "last", "all"}
+--  @param priority The priority of the path if any (default is zero)
+local function remFunc(a, where, priority, nodups)
    if (where == "all" or abs(priority) > 0) then
       local oldPriority = 0
       if (next(a) ~= nil) then
          oldPriority = tonumber(a[1][2])
       end
-      if (oldPriority == priority) then
+      if (oldPriority == priority or nodups) then
          a = nil
       end
    elseif (where == "first" ) then
@@ -260,48 +278,55 @@ local function remFunc(a, where, priority)
 end
 
 --------------------------------------------------------------------------
--- Var:remove(): remove an entry in a path.  The remove action depends on
---               "where".  Note that the final action of this routine is
---               to push the new value into the current environment so that
---               any modules loaded will also know the new value.
-
---------------------------------------------------------------------------
---  Report an error/warning when removing a path element without the
---  same priority
---------------------------------------------------------------------------
-
-
-function M.remove(self, value, where, priority)
+-- Remove an entry in a path.  The remove action depends on
+-- "where".  Note that the final action of this routine is
+-- to push the new value into the current environment so that
+-- any modules loaded will also know the new value.
+-- @param self A Var object
+-- @param value The value to remove
+-- @param where where it should be removed from {"first", "last", "all"}
+-- @param priority The priority of the entry.
+-- @param nodup If true then there are no duplicates allowed.
+function M.remove(self, value, where, priority, nodups)
+   dbg.start{"Var:remove(value: ",value,", where:",where,", priority: ",priority,")"}
    if (value == nil) then return end
    priority = priority or 0
 
    if (where == "first") then
       priority = - priority
    end
+   if (dbg.active() and self.name == "MODULEPATH") then
+      self:prt()
+   end
 
    where = allow_dups(true) and where or "all"
    local pathA   = path2pathA(value, self.sep)
    local tbl     = self.tbl
-   local adding  = false    
+   local adding  = false
 
    for i = 1, #pathA do
       local path = pathA[i]
+      dbg.print{"path: ",path,"\n"}
       if (tbl[path]) then
-         tbl[path] = remFunc(self.tbl[path], where, priority)
+         dbg.print{"removing path: ",path,"\n"}
+         tbl[path] = remFunc(self.tbl[path], where, priority, nodups)
          chkMP(self.name,adding,path)
       end
    end
    local v    = self:expand()
+   dbg.print{"where: ",where,", new value: ",v,"\n"}
    self.value = v
    if (not v) then v = nil end
    setenv_posix(self.name, v, true)
+   dbg.fini("Var:remove")
 end
 
 --------------------------------------------------------------------------
--- Var:pop(): Remove the top value and return the second value or nil if
---            none are left.
-
+-- Remove the top value and return the second value or nil if
+-- none are left.
+-- @param self A Var object.
 function M.pop(self)
+   self.type    = 'path'
    local imin   = self.imin
    local min2   = huge
    local result = nil
@@ -314,35 +339,46 @@ function M.pop(self)
       local v = idxA[1][1]
       dbg.print{"v: ",v,", imin: ",imin,", min2: ",min2,"\n"}
       if (v == imin) then
-         self.tbl[k] = remFunc(idxA, "first", 0)
-         v = huge
+         idxA        = remFunc(idxA, "first", 0)
+         self.tbl[k] = idxA
+         if (idxA ~= nil) then
+            v = idxA[1][1]
+         else
+            v = huge
+         end
       end
+      dbg.print{"v: ",v,"\n"}
       if (v < min2) then
          min2   = v
          result = k
       end
+      dbg.print{"min2: ",min2,"\n"}
    end
    dbg.print{"imin: ",imin,", min2: ",min2,"\n"}
    if (min2 < huge) then
       self.imin = min2
    end
 
+   local v    = self:expand()
+   self.value = v
    if (dbg.active()) then
       self:prt("(2) Var:pop()")
    end
-   local v    = self:expand()
-   self.value = v
    if (not v) then v = nil end
    setenv_posix(self.name, v, true)
    return result
 end
 
 --------------------------------------------------------------------------
--- insertFunc(): insert index into table with priority.  If nodup or this
---               particular path entry has a priority then there is only
---               one entry in the path.  Otherwise insert [[idx]] at
---               beginning for prepends and at the end for appends.
-
+-- insert index into table with priority.  If nodup or this
+-- particular path entry has a priority then there is only
+-- one entry in the path.  Otherwise insert [[idx]] at
+-- beginning for prepends and at the end for appends.
+-- @param a Input array of entries in path like variable.
+-- @param idx the index value for the entry.
+-- @param isPrepend True if a prepend.
+-- @param nodups True if no duplications are allowed.
+-- @param priority The priority value.
 local function insertFunc(a, idx, isPrepend, nodups, priority)
    if (nodups or abs(priority) > 0) then
       if (priority == 0) then
@@ -370,18 +406,23 @@ local function insertFunc(a, idx, isPrepend, nodups, priority)
 end
 
 --------------------------------------------------------------------------
--- Var:prepend(): Prepend an entry into a path. [[nodups]] controls
---                policies on duplication by setting [[insertFunc]].
-
---------------------------------------------------------------------------
---  Report an error/warning when appending/prepending a path element 
---  without the same priority
---------------------------------------------------------------------------
-
-
+-- Prepend an entry into a path. [[nodups]] controls
+-- policies on duplication by setting [[insertFunc]].
+--
+-- Report an error/warning when appending/prepending a path element
+-- without the same priority
+-- @param self A Var object
+-- @param value The value to prepend
+-- @param nodups True if no duplications are allowed.
+-- @param priority The priority value.
 function M.prepend(self, value, nodups, priority)
    if (value == nil) then return end
 
+   if (self.type ~= 'path') then
+      extract(self)
+   end
+
+   self.type           = 'path'
    priority            = priority or 0
    local pathA         = path2pathA(value, self.sep)
    local is, ie, iskip = prepend_order(#pathA)
@@ -389,16 +430,19 @@ function M.prepend(self, value, nodups, priority)
    local adding        = true
 
    local tbl  = self.tbl
+
    local imin = min(self.imin, 0)
    for i = is, ie, iskip do
       local path = pathA[i]
       imin       = imin - 1
-      local a    = tbl[path] or {}
-      tbl[path]  = insertFunc(a, imin, isPrepend, nodups, priority)
-      chkMP(self.name, adding,path)
+      local   a  = tbl[path]
+      if (LMOD_TMOD_PATH_RULE == "no" or not a) then
+         tbl[path] = insertFunc(a or {}, imin, isPrepend, nodups, priority)
+         chkMP(self.name, adding,path)
+      end
    end
    self.imin = imin
-   
+
    local v    = self:expand()
    self.value = v
    if (not v) then v = nil end
@@ -406,11 +450,18 @@ function M.prepend(self, value, nodups, priority)
 end
 
 --------------------------------------------------------------------------
--- Var:append(): Append an entry into a path. [[nodups]] controls
---               policies on duplication by setting [[insertFunc]].
-
+-- Append an entry into a path. [[nodups]] controls
+-- policies on duplication by setting [[insertFunc]].
+-- @param self A Var object
+-- @param value The value to prepend
+-- @param nodups True if no duplications are allowed.
+-- @param priority The priority value.
 function M.append(self, value, nodups, priority)
    if (value == nil) then return end
+   if (self.type ~= 'path') then
+      extract(self)
+   end
+   self.type        = 'path'
    nodups           = not allow_dups(not nodups)
    priority         = tonumber(priority or "0")
    local pathA      = path2pathA(value, self.sep)
@@ -422,9 +473,11 @@ function M.append(self, value, nodups, priority)
    for i = 1, #pathA do
       local path = pathA[i]
       imax       = imax + 1
-      local a    = tbl[path] or {}
-      tbl[path]  = insertFunc(a, imax, isPrepend, nodups, priority)
-      chkMP(self.name, adding, path)
+      local   a  = tbl[path]
+      if (LMOD_TMOD_PATH_RULE == "no" or not a) then
+         tbl[path]  = insertFunc(a or {}, imax, isPrepend, nodups, priority)
+         chkMP(self.name, adding,path)
+      end
    end
    self.imax  = imax
    local v    = self:expand()
@@ -434,70 +487,97 @@ function M.append(self, value, nodups, priority)
 end
 
 --------------------------------------------------------------------------
--- Master: The following are simple set/unset functions.
-
+-- Set the environment variable to *value*
+-- @param self A Var object
+-- @param value the value to set.
 function M.set(self,value)
    if (not value) then value = false end
-   self.value = value 
+   self.value = value
    self.type  = 'var'
    if (not value) then value = nil end
    setenv_posix(self.name, value, true)
 end
 
+--------------------------------------------------------------------------
+-- Unset the environment variable.
+-- @param self A Var object
 function M.unset(self)
    self.value = false
    self.type  = 'var'
    setenv_posix(self.name, nil, true)
 end
 
+--------------------------------------------------------------------------
+-- Set the local variable to *value*
+-- @param self A Var object
+-- @param value the value to set.
 function M.setLocal(self,value)
    if (not value) then value = false end
    self.value = value
    self.type  = 'local_var'
 end
 
+--------------------------------------------------------------------------
+-- Unset the local variable.
+-- @param self A Var object
 function M.unsetLocal(self,value)
    self.value = false
    self.type  = 'local_var'
 end
 
+--------------------------------------------------------------------------
+-- Set the alias.
+-- @param self A Var object.
+-- @param value the text of the alias.
 function M.setAlias(self,value)
    if (not value) then value = false end
    self.value = value
    self.type  = 'alias'
 end
 
-function M.unsetAlias(self,value)
+--------------------------------------------------------------------------
+-- unset the alias.
+-- @param self A Var object.
+function M.unsetAlias(self)
    self.value = false
    self.type  = 'alias'
 end
 
+--------------------------------------------------------------------------
+-- Set a shell function for Bash and C-shell
+-- @param self A Var object.
+-- @param bash_func A bash function string.
+-- @param csh_func A C-shell function string.
 function M.setShellFunction(self,bash_func,csh_func)
    self.value = {bash_func,csh_func}
    self.type  = 'shell_function'
 end
 
-function M.unsetShellFunction(self,bash_func,csh_func)
+--------------------------------------------------------------------------
+-- Unset a shell function for Bash and C-shell
+-- @param self A Var object.
+function M.unsetShellFunction(self)
    self.value = false
    self.type  = 'shell_function'
 end
 
 --------------------------------------------------------------------------
--- Master:myType() - return the var type.
+-- Return the var type.
+-- @param self A Var object.
 function M.myType(self)
    return self.type
 end
 
 --------------------------------------------------------------------------
--- Master:expand(): Expand the value into a string.   Obviously non-path
---                  types are simply returned.
+-- Expand the value into a string.   Obviously non-path
+-- types are simply returned.
 --
---                  It is a two step process to expand the path variables.
---                  First table (self.tbl) is flipped where now the indices
---                  are the keys and the paths are the values.  This creates
---                  [[t]] with integer keys with possible gaps.  Then second
---                  loop uses pairByKeys to pick keys from lowest to highest.
-
+-- It is a two step process to expand the path variables.
+-- First table (self.tbl) is flipped where now the indices
+-- are the keys and the paths are the values.  This creates
+-- [[t]] with integer keys with possible gaps.  Then second
+-- loop uses pairByKeys to pick keys from lowest to highest.
+-- @param self A Var object.
 function M.expand(self)
    if (self.type ~= 'path') then
       return self.value, self.type, {}
@@ -507,10 +587,9 @@ function M.expand(self)
    local pathA   = {}
    local pathStr = false
    local sep     = self.sep
-   local factor  = 1
    local prT     = {}
    local maxV    = max(abs(self.imin), self.imax) + 1
-   local factor  = math.pow(10,ceil(log10(maxV)+1))
+   local factor  = 10^ceil(log(maxV)*ln10_inv+1)
    local resultA = {}
    local tbl     = self.tbl
 
@@ -540,10 +619,10 @@ function M.expand(self)
       pathA[n] = v
    end
 
-   
+
    -- Step 2.1: Remove extra trailing empty strings, keep only one.
 
-   local i = n 
+   local i = n
    while (pathA[i] == "") do
       i = i - 1
    end
@@ -587,7 +666,7 @@ function M.expand(self)
       end
       priorityStrT[env_name] = concatTbl(sA,';')
    end
-   
+
    if (next(tbl) == nil) then pathStr = false end
 
    return pathStr, "path", priorityStrT

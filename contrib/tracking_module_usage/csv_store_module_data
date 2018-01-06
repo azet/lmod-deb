@@ -1,0 +1,81 @@
+#!/usr/bin/env python
+# -*- python -*-
+from __future__ import print_function
+import os, sys, re, time, csv, datetime, argparse
+
+from LMODdb       import LMODdb
+from progressBar  import ProgressBar
+
+class CmdLineOptions(object):
+  """ Command line Options class """
+
+  def __init__(self):
+    """ Empty Ctor """
+    pass
+
+  def execute(self):
+    """ Specify command line arguments and parse the command line"""
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dbname",      dest='dbname',  action="store",      default = "lmod",    help="lmod db name")
+    parser.add_argument("--syshost",     dest='syshost', action="store",      default = "unknown", help="syshost")
+    parser.add_argument("csvA",          nargs="+",                                                help="csv files to process")
+    args = parser.parse_args()
+    return args
+
+def dbConfigFn(dbname):
+  """
+  Build config file name from dbname.
+  @param dbname: db name
+  """
+  return dbname + "_db.conf"
+
+def convert(s):
+  t1 = datetime.datetime.strptime(s, "%Y_%m_%d_%H_%M_%S")
+  t0 = datetime.datetime(1970,1,1)
+  return (t1 - t0).total_seconds()
+
+def main():
+  args     = CmdLineOptions().execute()
+  configFn = dbConfigFn(args.dbname)
+
+  lmod     = LMODdb(configFn)
+
+  if (args.syshost == "unknown"):
+    print("Aborting: You must specify the system host name(--syshost name)!")
+    sys.exit(1)
+
+
+  icnt = 0
+  pbar = ProgressBar(maxVal=len(args.csvA))
+  for fn in args.csvA:
+    icnt += 1
+    pbar.update(icnt)
+    f = open(fn,"r")
+    dataT = {}
+    dataT['syshost'] = args.syshost
+    try:
+      reader = csv.reader(f)
+      for row in reader:
+        user    = row[0]
+        epoch   = convert(row[1])
+        num     = len(row)
+        moduleA = []
+        for i in xrange(2,num):
+          idx = row[i].find(":")
+          moduleA.append([row[i][0:idx], row[i][idx+1:]])
+
+        for entry in moduleA:
+          dataT['time'   ] = epoch
+          dataT['user'   ] = user
+          dataT['module' ] = entry[0]
+          dataT['path'   ] = entry[1]
+          lmod.data_to_db(dataT)
+
+    finally:
+      f.close()
+  pbar.fini()
+
+
+
+
+if ( __name__ == '__main__'): main()

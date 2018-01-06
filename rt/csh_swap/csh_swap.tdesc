@@ -1,0 +1,171 @@
+-- -*- lua -*-
+testdescript = {
+   owner   = "rtm",
+   product = "modules",
+   description = [[
+	 Test initial module load
+   ]],
+   keywords = {"csh_swap" },
+
+   active = 1,
+   testName = "csh_swap",
+   job_submit_method = "INTERACTIVE",
+
+   runScript = [[
+
+     . $(projectDir)/rt/common_funcs.sh
+
+
+     unsetMT
+     initStdEnvVars
+
+     cp $(projectDir)/init/lmodrc.lua .lmodrc.lua
+
+     _histchars="@%"
+
+
+cat > $(testName).csh << EOF
+#!/bin/tcsh -f
+
+     lua $(projectDir)/src/lmod.in.lua csh purge > _stdclr.00
+     eval \`cat _stdclr.00\`
+
+     lua $(projectDir)/src/clearMT_cmd.in.lua csh > _stdclr.01
+     eval \`cat _stdclr.01\`
+
+     setenv ORIG_HOME `(cd $HOME; /bin/pwd)`
+     setenv HOME      `pwd`
+
+     unsetenv MANPATH
+
+     setenv PATH $PATH
+     setenv MODULEPATH $(projectDir)/mf/Core:$(testDir)/mf/Core
+     setenv MODULEPATH_ROOT $(projectDir)/mf
+
+
+     echo "==========================="
+     echo "step 0"
+     echo "==========================="
+
+     echo "===========================" >  _stdout.00
+     echo "step 0"                      >> _stdout.00
+     echo "===========================" >> _stdout.00
+
+     lua $(projectDir)/src/lmod.in.lua csh --version > _stdout.01
+     eval \`cat _stdout.01\`
+
+     echo "==========================="
+     echo "step 1"
+     echo "==========================="
+
+     echo "===========================" >  _stdout.02
+     echo "step 1"                      >> _stdout.02
+     echo "===========================" >> _stdout.02
+
+     lua $(projectDir)/src/lmod.in.lua csh load admin PrgEnv openmpi parmetis > _stdout.03
+     eval \`cat _stdout.03\`
+
+     echo "===========================" >  _stdout.04
+     echo "step 2"                      >> _stdout.04
+     echo "===========================" >> _stdout.04
+
+     echo "==========================="
+     echo "step 2"
+     echo "==========================="
+
+     lua $(projectDir)/src/lmod.in.lua csh unload intel > _stdout.05
+     eval \`cat _stdout.05\`
+
+     echo "===========================" >  _stdout.06
+     echo "step 3"                      >> _stdout.06
+     echo "===========================" >> _stdout.06
+
+     echo "==========================="
+     echo "step 3"
+     echo "==========================="
+
+     lua $(projectDir)/src/lmod.in.lua csh load gcc  > _stdout.07
+     eval \`cat _stdout.07\`
+
+     echo "===========================" >  _stdout.08
+     echo "step 4"                      >> _stdout.08
+     echo "===========================" >> _stdout.08
+
+     echo "==========================="
+     echo "step 4"
+     echo "==========================="
+
+
+     lua $(projectDir)/src/lmod.in.lua csh load ml minfo > _stdout.09
+     eval \`cat _stdout.09\`
+
+     echo "===========================" >  _stdout.10
+     echo "step 5"                      >> _stdout.10
+     echo "===========================" >> _stdout.10
+
+     echo "==========================="
+     echo "step 5"
+     echo "==========================="
+
+     lua $(projectDir)/src/lmod.in.lua csh unload minfo > _stdout.11
+     eval \`cat _stdout.11\`
+
+     echo "===========================" >  _stdout.12
+     echo "step 6"                      >> _stdout.12
+     echo "===========================" >> _stdout.12
+
+     echo "==========================="
+     echo "step 6"
+     echo "==========================="
+
+     lua $(projectDir)/src/lmod.in.lua csh load minfo/1.0 > _stdout.13
+     eval \`cat _stdout.13\`
+
+     echo "===========================" >  _stdout.14
+     echo "step 7"                      >> _stdout.14
+     echo "===========================" >> _stdout.14
+
+     echo "==========================="
+     echo "step 7"
+     echo "==========================="
+
+     unset histchars
+     lua $(projectDir)/src/lmod.in.lua csh --localvar histchars="$_histchars" swap gcc  intel > _stdout.15
+     eval \`cat _stdout.15\`
+
+     cat _stdout.[01][0-9] > _stdout.orig
+
+     setenv HOME $ORIG_HOME
+EOF
+
+     rm -fr _stderr.* _stdout.* err.* out.*  .lmod.d
+     unset SHELL_STARTUP_DEBUG
+     chmod +x $(testName).csh
+
+     ORIG_HOME=$HOME
+     HOME=$(outputDir)
+
+     ./$(testName).csh > _stderr.orig 2>&1
+     HOME=$ORIG_HOME
+
+     joinBase64Results -csh  _stdout.orig _stdout.new
+     cleanUp _stdout.new  out.txt
+     cleanUp _stderr.orig err.txt
+
+
+     rm -f results.csv
+     wrapperDiff --csv results.csv $(testDir)/out.txt out.txt
+     wrapperDiff --csv results.csv $(testDir)/err.txt err.txt
+     testFinish -r $(resultFn) -t $(runtimeFn) results.csv
+   ]],
+
+
+   blessScript = [[
+         # perform what is needed
+   ]],
+
+   tests = {
+      { id='t1'},
+   },
+
+}

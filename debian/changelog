@@ -1,3 +1,28 @@
+lmod (6.6-0.2) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * Conflict with environment-modules. (Closes: #846580)
+
+ -- Christian Hofstaedtler <zeha@debian.org>  Thu, 22 Dec 2016 06:49:08 +0000
+
+lmod (6.6-0.1) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * New upstream release. (Closes: #793355)
+  * Refresh patch change_paths
+  * Update debhelper compatibility 9.
+  * Install README.md, it has been renamed from README.
+  * Add build-depends on procps.
+  * Add build-depends and depends on tcl.
+  * Update Standars-Version to 3.9.8, no changes required.
+  * Update lintian overrides.
+  * Make lmod to behave like environment-modules:
+    - Allow to configure the list of modules path at /etc/lmod/modulespath
+    - Install /etc/profile.d/lmod.sh and read MODULESPATH from
+      /etc/lmod/modulespath
+
+ -- Ana Beatriz Guerrero Lopez <ana@debian.org>  Fri, 11 Nov 2016 23:37:24 +0100
+
 lmod (5.8-1) unstable; urgency=medium
 
   * Imported Upstream version 5.8 (Closes: #764722)

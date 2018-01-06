@@ -1,0 +1,67 @@
+-- -*- lua -*-
+inactiveTbl = { Darwin = 1, }
+_G._DEBUG   = false               -- Required by the new lua posix
+local function isActive()
+   local posix  = require("posix")
+   local osName = posix.uname("%s")
+   return (not inactiveTbl[osName])
+end
+
+testdescript = {
+   owner   = "rtm",
+   product = "modules",
+   description = [[
+	 Test initial module load
+   ]],
+   keywords = {"default","setdefault", "getdefault","setgetdefault","getsetdefault" },
+
+   active = 1,
+   testName = "sd_tacc",
+   job_submit_method = "INTERACTIVE",
+
+   runScript = [[
+
+     . $(projectDir)/rt/common_funcs.sh
+     unsetMT
+     initStdEnvVars
+     MODULEPATH=$(projectDir)/mf/TACC;  export MODULEPATH
+     MODULEPATH_ROOT=$(projectDir)/mf;  export MODULEPATH_ROOT
+
+     rm -fr _stderr.* _stdout.* err.* out.* .lmod.d
+     rm -rf $HOME/.lmod.d
+
+     runLmod --version         # 1
+     runLmod load TACC.orig    # 2
+     runLmod save              # 3
+
+     runLmod purge             # 4
+     PATH=$PATH_to_LUA:$PATH
+     runLmod load TACC         # 5
+     runLmod save              # 6
+
+     HOME=$ORIG_HOME
+
+     cat _stdout.[0-9][0-9][0-9] > _stdout.orig
+     joinBase64Results  -bash  _stdout.orig _stdout.new
+     cleanUp _stdout.new out.txt
+
+     cat _stderr.[0-9][0-9][0-9] > _stderr.orig
+     cleanUp _stderr.orig err.txt
+
+     rm -f results.csv
+
+     wrapperDiff --csv results.csv $(testDir)/out.txt out.txt
+     wrapperDiff --csv results.csv $(testDir)/err.txt err.txt
+     testFinish -r $(resultFn) -t $(runtimeFn) results.csv
+   ]],
+
+
+   blessScript = [[
+         # perform what is needed
+   ]],
+
+   tests = {
+      { id='t1'},
+   },
+
+}

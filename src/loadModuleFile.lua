@@ -1,5 +1,8 @@
 --------------------------------------------------------------------------
--- Fixme
+-- This module is the only file that actually reads and causes the
+-- module file to be evaluated.  If the file name has a ".lua" extension
+-- then it is a Lua modulefile.  Otherwise it is considered to be a TCL
+-- modulefile.
 -- @module loadModuleFile
 
 require("strict")
@@ -41,24 +44,34 @@ require("strict")
 require("fileOps")
 require("sandbox")
 require("string_utils")
-local dbg       = require("Dbg"):dbg()
-local concatTbl = table.concat
-
+require("utils")
+require("myGlobals")
+local dbg          = require("Dbg"):dbg()
+local concatTbl    = table.concat
+local getenv       = os.getenv
 ------------------------------------------------------------------------
 -- loadModuleFile(t): read a modulefile in via sandbox_run
-
+-- @param t The input table naming the file to be loaded plus other
+--          things like the current list of modules and the shell.
 function loadModuleFile(t)
-   dbg.start{"loadModuleFile()"}
-   dbg.print{"t.file: ",t.file,"\n"}
-   dbg.flush()
+   dbg.start{"loadModuleFile(",t.file,")"}
 
    local full    = myModuleFullName()
    local usrName = myModuleUsrName()
    local myType  = extname(t.file)
+   local status  = true
    local func
    local msg
-   local status = true
    local whole
+
+   -- If the user is requesting an unload, don't complain if the file
+   -- has disappeared.
+
+   if (mode() == "unload" and not isFile(t.file)) then
+      dbg.fini("loadModuleFile")
+      return
+   end
+
    if (myType == ".lua") then
       -- Read in lua module file into a [[whole]] string.
       local f = io.open(t.file)
@@ -85,15 +98,30 @@ function loadModuleFile(t)
       A[#A + 1]    = usrName
       A[#A + 1]    = "-s"
       A[#A + 1]    = t.shell
-      if (t.help) then
-         A[#A + 1] = t.help
+
+      local ldlib  = getenv("LD_LIBRARY_PATH")
+
+      if (ldlib) then
+         A[#A + 1]    = "-L"
+         A[#A + 1]    = "\"" .. ldlib .. "\""
       end
-      local a      = {}
-      a[#a + 1]	   = pathJoin(cmdDir(),"tcl2lua.tcl")
-      a[#a + 1]	   = concatTbl(A," ")
-      a[#a + 1]	   = t.file
-      local cmd    = concatTbl(a," ")
-      whole        = capture(cmd)
+
+      local ld_preload = getenv("LD_PRELOAD")
+
+      if (ld_preload) then
+         A[#A + 1]    = "-P"
+         A[#A + 1]    = "\"" .. ld_preload .. "\""
+      end
+      
+      if (t.help) then
+         A[#A + 1] = "-h"
+      end
+      whole, status = runTCLprog("tcl2lua.tcl",concatTbl(A," "), t.file)
+      if (not status) then
+         local n = usrName or ""
+         msg     = "Non-zero status returned"
+         LmodError("Unable to load module: ",n,"\n    ",t.file,": ", msg,"\n")
+      end
    end
 
    -- Use the sandbox to evaluate modulefile text.

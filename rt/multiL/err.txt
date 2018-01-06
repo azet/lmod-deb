@@ -1,0 +1,125 @@
+===========================
+step 1
+lua ProjectDIR/src/lmod.in.lua bash --regression_testing --version
+===========================
+Modules based on Lua: Version 6.5.16  2016-10-04 17:13 -05:00
+    by Robert McLay mclay@tacc.utexas.edu
+===========================
+step 2
+lua ProjectDIR/src/lmod.in.lua bash --regression_testing avail
+===========================
+ProjectDIR/rt/multiL/mf/Core
+   cmplr/gcc/4.7.2    cmplr/intel/13.1
+Use "module spider" to find all possible modules.
+Use "module keyword key1 key2 ..." to search for all possible modules matching any of the "keys".
+===========================
+step 3
+lua ProjectDIR/src/lmod.in.lua bash --regression_testing spider
+===========================
+The following is a list of the modules currently available:
+  cmplr/gcc: cmplr/gcc/4.7.2
+    Gnu Compiler Collection
+  cmplr/intel: cmplr/intel/13.1
+    Intel Compiler Collection
+  mpi/mpich2: mpi/mpich2/1.5.2
+  parLib/petsc: parLib/petsc/3.3
+To learn more about a package enter:
+   $ module spider Foo
+where "Foo" is the name of a module
+To find detailed information about a particular package you
+must enter the version if there is more than one version:
+   $ module spider Foo/11.1
+===========================
+step 4
+lua ProjectDIR/src/lmod.in.lua bash --regression_testing load cmplr/gcc
+===========================
+===========================
+step 5
+lua ProjectDIR/src/lmod.in.lua bash --regression_testing avail
+===========================
+ProjectDIR/rt/multiL/mf/cmplr/gcc/4.7
+   mpi/mpich2/1.5.2
+ProjectDIR/rt/multiL/mf/Core
+   cmplr/gcc/4.7.2 (L)    cmplr/intel/13.1
+  Where:
+   L:  Module is loaded
+Use "module spider" to find all possible modules.
+Use "module keyword key1 key2 ..." to search for all possible modules matching any of the "keys".
+===========================
+step 6
+lua ProjectDIR/src/lmod.in.lua bash --regression_testing load mpi/mpich2
+===========================
+===========================
+step 7
+lua ProjectDIR/src/lmod.in.lua bash --regression_testing load parLib/petsc
+===========================
+===========================
+step 8
+lua ProjectDIR/src/lmod.in.lua bash --regression_testing list
+===========================
+Currently Loaded Modules:
+  1) cmplr/gcc/4.7.2   2) mpi/mpich2/1.5.2   3) parLib/petsc/3.3
+===========================
+step 9
+lua ProjectDIR/src/lmod.in.lua bash --regression_testing avail
+===========================
+ProjectDIR/rt/multiL/mf/mpi/mpich2/1.5/cmplr/gcc/4.7
+   parLib/petsc/3.3 (L)
+ProjectDIR/rt/multiL/mf/cmplr/gcc/4.7
+   mpi/mpich2/1.5.2 (L)
+ProjectDIR/rt/multiL/mf/Core
+   cmplr/gcc/4.7.2 (L)    cmplr/intel/13.1
+  Where:
+   L:  Module is loaded
+Use "module spider" to find all possible modules.
+Use "module keyword key1 key2 ..." to search for all possible modules matching any of the "keys".
+===========================
+step 10
+lua ProjectDIR/src/lmod.in.lua bash --regression_testing unload cmplr/gcc
+===========================
+Inactive Modules:
+  1) mpi/mpich2  2) parLib/petsc
+===========================
+step 11
+lua ProjectDIR/src/lmod.in.lua bash --regression_testing load cmplr/gcc
+===========================
+Activating Modules:
+  1) mpi/mpich2/1.5.2  2) parLib/petsc/3.3
+===========================
+step 12
+lua ProjectDIR/src/lmod.in.lua bash --regression_testing swap cmplr/gcc cmplr/intel
+===========================
+Due to MODULEPATH changes the following have been reloaded:
+  1) mpi/mpich2/1.5.2  2) parLib/petsc/3.3
+===========================
+step 13
+lua ProjectDIR/src/lmod.in.lua bash --regression_testing list
+===========================
+Currently Loaded Modules:
+  1) cmplr/intel/13.1   2) mpi/mpich2/1.5.2   3) parLib/petsc/3.3
+===========================
+step 14
+lua ProjectDIR/src/lmod.in.lua bash --regression_testing unload cmplr/intel/13.1
+===========================
+Inactive Modules:
+  1) mpi/mpich2  2) parLib/petsc
+===========================
+step 15
+lua ProjectDIR/src/lmod.in.lua bash --regression_testing list
+===========================
+Currently Loaded Modules:
+  None found.
+Inactive Modules:
+  1) mpi/mpich2   2) parLib/petsc
+===========================
+step 16
+lua ProjectDIR/src/lmod.in.lua bash --regression_testing load cmplr/intel/13.1
+===========================
+Activating Modules:
+  1) mpi/mpich2/1.5.2  2) parLib/petsc/3.3
+===========================
+step 17
+lua ProjectDIR/src/lmod.in.lua bash --regression_testing list
+===========================
+Currently Loaded Modules:
+  1) cmplr/intel/13.1   2) mpi/mpich2/1.5.2   3) parLib/petsc/3.3

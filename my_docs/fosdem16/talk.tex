@@ -1,0 +1,515 @@
+%* installation (deps, build/install procedure, making module/ml work)
+%* configuration (either via ./configure at build time, or via 
+%   $LMOD_FOO), most important configure options
+%* setting up the system spider cache: configuring Lmod, updating spider 
+%  cache, difference between system/user spider cache
+%* + all (other) aspects mentioned on slide #26 in this slide deck: 
+%   explained + example :)
+%* what settarg is all about
+
+\documentclass{beamer}
+
+\usetheme[headernav]{TACC} %%Drop the 'headernav' if you don't like
+                           %%the stuff at the top of your slide
+
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{alltt}
+\usepackage{graphicx}
+
+\title{Lmod: Building a Community around an Environment Modules Tool}
+
+
+\author{Robert McLay}
+\institute{The Texas Advanced Computing Center}
+
+\date{Jan. 30, 2015}  %% Use this if you want to fix the date in
+                      %% stone rather than use \today
+
+\newcommand{\bfnabla}{\mbox{\boldmath$\nabla$}}
+\newcommand{\laplacian}[1]{\bfnabla^2 #1}
+\newcommand{\grad}[1]{\bfnabla #1}
+\newcommand{\tgrad}[1]{\bfnabla^T #1}
+\newcommand{\dvg}[1]{\bfnabla \cdot #1}
+\newcommand{\curl}[1]{\bfnabla \times #1}
+\newcommand{\lap}[1]{\bfnabla^2 #1}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+
+% On today's supercomputers, chemists, biologists, physicists and
+% engineers are sharing the same system and they all need different
+% software. Environment Modules have been the way since the '90 that
+% users select the software they need.  They allow users to load and
+% unload the packages they want.  They get to control which version of
+% the software they use, rather than the system administrators.  Lmod,
+% implemented in Lua, is a modern replacement for the venerable TCL/C
+% based tool. Lmod offers many features to handle the vastly more
+% dynamic software environment than the original tool was designed to
+% handle.
+
+% Lmod is a modern, flexible, robust environment module system: the
+% system tool that "sets the table" by helping supercomputer users load
+% the software packages they need to do their work. They get to control which version of
+% the software they use, rather than the system administrators.  It is a Lua-based
+% drop-in replacement for the venerable TCL/C environment module
+% system. Because needs vary across the diverse computational research
+% community, module systems like Lmod are mission-critical, ubiquitous,
+% and expected on such systems: users need help selecting the correct
+% combination of tools from among the thousands available on modern,
+% large-scale systems. 
+% 
+% This is not a talk about Lmod's features or design; instead, the focus
+% is on process, community, and culture.  What is it like to develop,
+% maintain, and support a tool for a community that is often unaware
+% that it (or Lua) even exists?  How does one go about diagnosing and
+% correcting problems on systems to which you cannot get access? 
+%  
+% But the talk also addresses an important Lua-related issue. A module
+% system loads a given software package by interpreting a 'modulefile'
+% that describes the details of the environment that software package
+% needs. Lmod's native modulefiles are Lua programs; Lmod parses legacy
+% TCL modules by translating their instructions into Lua. This approach
+% has been very successful, but has not been without its challenges:
+% this talk includes an introduction to some of the associated technical
+% issues and edge cases. 
+%  
+% This has been an interesting ride, from a local tool deployed at a
+% single site in Texas, to an open source mainstay that is mission
+% critical at hundreds of supercomputer centers around the world. World
+% domination through Lua and Lmod, one center at a time! 
+
+\begin{frame}{Outline}
+  \begin{itemize}
+    \item What are Environment Modules and Lmod?
+    \item Using Lua to implement Lmod features
+    \item My experience building a community
+    \item Lmod tech. solutions to built trust
+    \item Conclusions
+  \end{itemize}
+\end{frame}
+
+
+
+\section{Environment Modules}
+
+\begin{frame}{What are Environment Modules?}
+  \begin{itemize}
+    \item A tool to set (and unset!) environment variables.
+    \item Useful for adding elements to \$PATH, \$LD\_LIBRARY\_PATH
+    \item Also remove elements from \$PATH, etc as well.
+    \item 1st paper on Env. Modules in 1991 by Furlani.
+    \item There is a TCL/C based tool (a.k.a Tmod)
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Why is this useful?}
+  \begin{itemize}
+    \item High Performance Computers have hundreds of users.
+    \item Physicists, Chemists, Biologist, Engineers need different
+      software
+    \item Modules provide a convenient way to support them all.
+    \item A software developers delight: 
+      \begin{itemize}
+        \item Switch compilers easily.
+        \item For both versions and programs.
+      \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+    \frametitle{An Example}
+    {\small
+      \begin{alltt}
+          \$ {\color{blue} ddt}
+          command not found: ddt
+          \$ {\color{blue} module load ddt}
+          \$ {\color{blue} ddt }
+          \$ {\color{blue} module rm ddt}
+          \$ {\color{blue} ddt}
+          command not found: ddt
+      \end{alltt}
+    }
+\end{frame}    
+
+\begin{frame}{What is Lmod?}
+  \begin{itemize}
+    \item A Lua based Enviroment Module Tool that supports TCL modulefiles
+    \item Tmod doesn't support a software hierarchy
+    \item The C++ Boost library needs to match Compiler and Version
+    \item Switch compilers should swap boost to match
+    \item Lmod does this automatically
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Why is this possible?}
+  \begin{itemize}
+    \item How can a command effect the current environment?
+    \item In Unix, the child process inherits the environment
+    \item Not the other way around
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{The trick}
+  \begin{itemize}
+    \item All \emph{lmod} does is produce text.
+    \item \texttt{module () \{ eval \$(lmod bash "\$@")\}}
+  \end{itemize}
+\end{frame}
+
+
+\begin{frame}[fragile]
+    \frametitle{A Simple Modulefile in Lua}
+    {\small
+      \begin{alltt}
+          help([[A help message for ddt]])
+          setenv("TACC_DDT_DIR", "/opt/apps/ddt/3.4.1")
+          prepend_path("PATH",   "/opt/apps/ddt/3.4.1/bin")
+      \end{alltt}
+    }
+\end{frame}    
+
+\begin{frame}[fragile]
+    \frametitle{Results from \texttt{module load ddt}}
+    {\small
+      \begin{alltt}
+          # in Bash:
+          export TACC_DDT_DIR="/opt/apps/ddt/3.4.1"
+          export PATH="/opt/apps/ddt/3.4.1/bin:..."
+
+          # in C-shell:
+          setenv TACC_DDT_DIR "/opt/apps/ddt/3.4.1"
+          setenv PATH         "/opt/apps/ddt/3.4.1/bin:..."
+      \end{alltt}
+    }
+\end{frame}    
+
+\begin{frame}[fragile]
+    \frametitle{Results from \texttt{module unload ddt}}
+    {\small
+      \begin{alltt}
+          # in Bash:
+          unset TACC_DDT_DIR
+          export PATH="..."
+
+          # in C-shell:
+          unsetenv TACC_DDT_DIR
+          setenv   PATH         "..."
+      \end{alltt}
+    }
+\end{frame}    
+
+\begin{frame}{What is Lmod doing?}
+  \begin{itemize}
+    \item Sites/Users write actions required for load.
+    \item Each function does different things depending on mode.
+    \item It is usually either: action, reverse, quiet
+  \end{itemize}
+\end{frame}
+
+\section{Using Lua Features}
+
+\begin{frame}{How to handle the different modes?}
+  \begin{enumerate}
+    \item Single functions with if tests
+    \item redefine \texttt{setenv}, \texttt{prepend\_path}, ...
+    \item Class based solution
+  \end{enumerate}
+\end{frame}
+
+\begin{frame}[fragile]
+    \frametitle{Module functions}
+    {\small
+      \begin{alltt}
+          main()
+            local mode = "load"
+            mcp = MasterControl.build(mode)
+            ...
+            sandbox_run(fn)
+          end
+          function setenv(...)
+             mcp:setenv(...)
+          end       
+          function prepend_path(...)
+             mcp:prepend_path(...)
+          end       
+      \end{alltt}
+    }
+\end{frame}    
+
+\begin{frame}[fragile]
+    \frametitle{Factory to build Lmod evaluation modes}
+    {\small
+      \begin{alltt}
+          function MasterControl.build(name)
+            local tbl = \{ load = require('MC_Load'),
+                          unload = require('MC_Unload'), \}
+            return tbl[name]:create()
+          end
+
+      \end{alltt}
+    }
+\end{frame}
+
+\begin{frame}[fragile]
+    \frametitle{MC\_Load.lua, MC\_Unload.lua}
+    {\small
+      \begin{alltt}
+# MC_Load.lua
+local M        = inheritsFrom(MasterControl)
+M.help         = MasterControl.quiet
+M.prepend_path = MasterControl.prepend_path
+M.setenv       = MasterControl.setenv
+return M
+
+# MC_Unload.lua
+local M        = inheritsFrom(MasterControl)
+M.help         = MasterControl.quiet
+M.prepend_path = MasterControl.remove_path
+M.setenv       = MasterControl.unsetenv
+return M
+      \end{alltt}
+    }
+\end{frame}    
+
+
+\begin{frame}{Sandboxing}
+  \begin{itemize}
+    \item Lmod uses a ``sandbox'' to evaluate modulefiles
+    \item This is \texttt{pcall(untrusted\_function)} with a limited
+      environment 
+    \item No stack traceback for broken modulefiles.
+    \item Protect Users from calling Lmod internal functions.
+    \item Sites can add their own functions.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Hooks \& SitePackage.lua}
+  \begin{itemize}
+    \item Tmod has been around for 20+ years.
+    \item Each site does things differently.
+    \item Sites must be able to control behavior.
+    \item Sites can create a SitePackage.lua file
+    \item Register function with the hooks.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Example Hook Functions}
+  \begin{itemize}
+    \item Use the load hook to keep track of module usage
+    \item Register the site's name.
+    \item Use the message hook to add to the output of avail and spider.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Passing Lmod state between calls}
+  \begin{itemize}
+    \item Lmod uses a table to keep its state
+    \item This is base64 encoded and stored in the environment
+    \item This encoding avoids having to deal with quotes.
+  \end{itemize}
+\end{frame}
+
+
+
+\section{Building a Community}
+
+\begin{frame}{Lmod beginning (I)}
+  \begin{itemize}
+    \item Lmod was first released in 2009.
+    \item I prototyped it in Lua
+    \item Figuring that Tmod community might be interested.
+    \item The prototype was fast enough!
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Lmod beginning (II)}
+  \begin{itemize}
+    \item It was deployed at TACC.
+    \item Opt-in/Opt-out strategy.
+    \item TACC is one of the largest Open Science HPC systems in US.
+    \item With over 10K user accounts (not all active)
+    \item Lmod was designed to ``scratch the itch'' of our problems.
+    \item Announced Lmod on the Environment Modules Mailing list.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Early User Interaction}
+  \begin{itemize}
+    \item A user will find Lmod as the ``answer'' to their needs
+    \item Sometimes I'm their new best friend.
+    \item Sometimes that means stretching Lmod in new directions
+    \item Sometimes that means saying no.
+    \item I refused to add A.I. or change core features for
+      your site only.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Building Trust}
+  \begin{itemize}
+    \item We are all busy people.
+    \item Few will change to my tool just because it is new.
+    \item It has to be way ``better'' somehow.
+    \item They want to know that you'll be around to support it. 
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Lmod's way to Build Trust} 
+  \begin{itemize}
+    \item A mailing list where questions get answered.
+    \item Presentations at important conferences: SC, XSEDE, ISC
+    \item Good up-to-date documentation (I'm working on it!!)
+    \item Try not to break compatibility with original.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Specific issues w.r.t. Lua}
+  \begin{itemize}
+    \item Lua is a great language to work in.
+    \item But the community of users is much smaller than Python.
+    \item There has been some resistance to accepting Lmod
+    \item ``\emph{I don't want to learn Lua!}'' - a busy sys-admin
+    \item ``\emph{When is this going to be ported to Python?}'' - another sys-admin
+    \item A fair amount of feature request and bug reports
+    \item Not much contributed code.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Feature Requests from users}
+  \begin{itemize}
+    \item User requests feature that I don't think I'll use
+    \item But sometimes my site does!
+    \item Sometime users ask the right questions 
+    \item They can sometimes solve tech problems.
+  \end{itemize}
+\end{frame}
+
+
+
+\section{Tech Solutions for reliable programs}
+
+\begin{frame}{Tech Solutions}
+  \begin{itemize}
+    \item A Test Suite for Lmod
+    \item Logging Capability
+    \item Report configuration.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Test Suite }
+  \begin{itemize}
+    \item Hermes framework test suite: tm program
+    \item A Test tool manager.  It runs shell scripts
+    \item The script much report pass/fail/diff
+    \item ``Wrong'' tests can easily be rerun.
+    \item Available: https://github.com/rtmclay/Hermes
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Test Suite (II) }
+  \begin{itemize}
+    \item Lmod produces both stderr and stdout
+    \item Each output is filter to make it generic. 
+    \item \texttt{/home/mclay} $\Rightarrow$ \texttt{HOME} etc.
+    \item Both stderr and stdout must match exactly with gold copies.
+    \item Suite take under 2mins to run all tests.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+    \frametitle{Logging Capability}
+  \begin{itemize}
+    \item I have yet to find a GUI debugger I like for lua.
+    \item I developed this simple logger with indentation and \{ \}
+    \item This logging is \emph{\color{blue} always} available
+    \item This way I can debug remote problems!
+ \end{itemize}
+\end{frame}    
+
+\begin{frame}[fragile]
+    \frametitle{Logging Code}
+    {\small
+      \begin{alltt}
+local dbg = require("Dbg"):dbg()
+function M.Load(n)
+    dbg.start\{"Load(",n,")"\}
+    ...
+    dbg.print\{"var: ",var,"\textbackslash{}n"\}
+    ...
+    dbg.fini("Load")
+end
+
+      \end{alltt}
+    }
+\end{frame}    
+
+\begin{frame}[fragile]
+    \frametitle{Logging example}
+    {\small
+      \begin{alltt}
+\$ module -D load ddt 2> load.log
+
+lmod(-D load ddt)\{
+  Load(ddt)\{
+    MT:_build_locationTbl(mpathA)\{
+      Cache:cache()\{
+      \} Cache:cache
+      moduleT: false
+    \}
+      ...
+\}
+      \end{alltt}
+    }
+\end{frame}    
+
+\begin{frame}{Lmod configuration report}
+  \begin{itemize}
+    \item There are many version of Lmod in the wild
+    \item Some a year or more old.
+    \item A bug may have been fixed in a new version
+    \item Lmod has many options to control its behavior
+    \item The configuration report is always include with logging.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+    \frametitle{Lmod configuration report}
+    {\small
+      \begin{alltt}
+Modules based on Lua: Version 6.0.25 2016-01-12 09:51
+    by Robert McLay mclay@tacc.utexas.edu
+
+Description                      Value
+-----------                      -----
+Allow TCL modulefiles            yes
+Auto swapping                    yes
+Case Independent Sorting         no
+Colorize Lmod                    yes
+...
+      \end{alltt}
+    }
+\end{frame}    
+
+\section{Conclusions}
+\begin{frame}{Conclusions}
+  \begin{itemize}
+    \item It has been an interesting ride!
+    \item Lmod is available from github, sourceforge
+    \item Available: brew, fedora, Debian, Ubuntu, ...
+    \item Lmod is more reliable and much more capable than just
+      in-house project
+    \item It has been a great deal of fun
+    \item But also a lot of work!
+    \item And there is no way I'm going to keep them all happy.
+  \end{itemize}
+\end{frame}
+
+
+\end{document}
+
+% hererocks: from python to install lua in different directories.
+% middle class: a lua based class tool
+% busted: a lua based test tool (library?)
+% http://kikito.github.io/ci-with-lua/

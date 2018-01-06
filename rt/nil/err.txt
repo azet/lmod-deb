@@ -1,0 +1,21 @@
+===========================
+step 1
+lua ProjectDIR/src/lmod.in.lua bash --regression_testing --version
+===========================
+Modules based on Lua: Version 5.8.2  2015-01-14 20:55
+    by Robert McLay mclay@tacc.utexas.edu
+===========================
+step 2
+lua ProjectDIR/src/lmod.in.lua bash --regression_testing spider
+===========================
+Lmod Warning: Syntax error in file:
+ProjectDIR/rt/nil/mf/Core/nil/1.0.lua
+ with command: prepend_path  One or more arguments are not strings
+The following is a list of the modules currently available:
+  nil: nil/1.0
+To learn more about a package enter:
+   $ module spider Foo
+where "Foo" is the name of a module
+To find detailed information about a particular package you
+must enter the version if there is more than one version:
+   $ module spider Foo/11.1

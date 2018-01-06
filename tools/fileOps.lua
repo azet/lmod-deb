@@ -31,17 +31,59 @@ require("strict")
 --------------------------------------------------------------------------
 
 require("string_utils")
+_G._DEBUG       = false                     -- Required by luaposix 33
 local posix     = require("posix")
 local lfs       = require("lfs")
 local concatTbl = table.concat
+local dbg       = require("Dbg"):dbg()
 
+local function argsPack(...)
+   local arg = { n = select("#", ...), ...}
+   return arg
+end
+local pack        = (_VERSION == "Lua 5.1") and argsPack or table.pack
 --------------------------------------------------------------------------
 -- find the absolute path to an executable.
 -- @param exec Name of executable
 -- @param path The path to use. If nil then use env PATH.
 function findInPath(exec, path)
-   local result  = ""
+   local result  = "unknown_path_for_" .. (exec or "unknown")
    if ( exec == nil) then return result end
+   exec = exec:trim()
+   local i = exec:find(" ")
+   local cmd  = exec
+   local tail = ""
+   if (i) then
+      cmd  = exec:sub(1,i-1)
+      tail = exec:sub(i)
+   end
+
+   if (cmd:find("/")) then
+      if (posix.access(cmd,"x")) then
+         return exec
+      else
+         return result
+      end
+   end
+
+   path    = path or os.getenv("PATH")
+   for dir in path:split(":") do
+      local fullcmd = pathJoin(dir, cmd)
+      if (posix.access(fullcmd,"x")) then
+         result = fullcmd .. tail
+         break
+      end
+   end
+   return result
+end
+
+--------------------------------------------------------------------------
+-- find the absolute path to an executable or nil if not found
+-- @param exec Name of executable
+-- @param path The path to use. If nil then use env PATH.
+function find_exec_path(exec, path)
+   local result  = nil
+   if ( exec == nil or exec == "" or exec:lower() == "none" ) then return result end
    exec = exec:trim()
    local i = exec:find(" ")
    local cmd  = exec
@@ -77,6 +119,13 @@ end
 function isDir(d)
    if (d == nil) then return false end
    local t = posix.stat(d,"type")
+
+   -- If the file is a link then adding a '/' on the end
+   -- seems to tell stat to resolve the link to its final link.
+   if (t == "link") then
+      d = d .. '/'
+      t = posix.stat(d,"type")
+   end
 
    local result = (t == "directory")
 
@@ -195,7 +244,7 @@ end
 
 function pathJoin(...)
    local a = {}
-   local arg = { n = select('#', ...), ...}
+   local arg = pack(...)
    for i = 1, arg.n  do
       local v = arg[i]
       if (v and v ~= '') then
@@ -312,13 +361,56 @@ end
 -- @return A clean canonical path.
 function path_regularize(value)
    if value == nil then return nil end
-   value = value:gsub("^%s+","")
-   value = value:gsub("%s+$","")
-   value = value:gsub("//+","/")
-   value = value:gsub("/%./","/")
-   value = value:gsub("/$","")
+   value = value:gsub("^%s+", "")
+   value = value:gsub("%s+$", "")
+   value = value:gsub("//+" , "/")
+   value = value:gsub("/%./", "/")
+   value = value:gsub("/$"  , "")
    if (value == '') then
       value = ' '
+      return value
    end
+   local t    = {}
+   local icnt = 0
+   for dir in value:split("/") do
+      icnt = icnt + 1
+      if (    dir == ".." and icnt > 1) then
+         t[#t] = nil
+      elseif (dir ~= "."  or icnt == 1) then
+         t[#t+1] = dir
+      end
+   end
+   value = concatTbl(t,"/")
+
    return value
+end
+
+
+local function _walk_dir(path)
+   local dirA  = {}
+   local fileA = {}
+   for file in lfs.dir(path) do
+      if ( file ~= '.' and file ~= '..') then
+         local fn   = pathJoin(path,file)
+         local mode = lfs.attributes(fn,'mode')
+         if (mode == 'directory') then
+            dirA[#dirA+1]   = file
+         else
+            fileA[#fileA+1] = file
+         end
+      end
+   end
+   return dirA, fileA
+end
+
+local function _walker(root)
+   local dirA, fileA = _walk_dir(root)
+   coroutine.yield(root,dirA,fileA)
+   for i = 1, #dirA do
+      _walker(pathJoin(root,dirA[i]))
+   end
+end
+
+function dir_walk(path)
+   return coroutine.wrap(function () _walker(path) end)
 end

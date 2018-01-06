@@ -88,17 +88,21 @@ function M.prereq(self)
    local mt    = MT:mt()
    local sn    = self:sn()
    if (not mt:have(sn, "active")) then
+      dbg.fini("MN_Latest:prereq")
       return self:show()
    end
 
    local version = latestVersion(self)
    if (not version) then
+      dbg.fini("MN_Latest:prereq")
       return self:show()
    end
    local sv    = mt:Version(sn)
    if (sv ~= version) then
+      dbg.fini("MN_Latest:prereq")
       return self:show()
    end
+   dbg.fini("MN_Latest:prereq")
    return false
 end
 
@@ -115,7 +119,6 @@ function M.isloaded(self)
    if (not version) then
       return false
    end
-   local mt = MT:mt()
    local sv = mt:Version(self:sn())
    return sv == version
 end
@@ -133,7 +136,6 @@ function M.isPending(self)
    if (not version) then
       return false
    end
-   local mt = MT:mt()
    local sv = mt:Version(self:sn())
    return sv == version
 end

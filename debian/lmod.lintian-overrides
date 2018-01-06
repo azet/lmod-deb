@@ -5,7 +5,6 @@ lmod: csh-considered-harmful usr/share/lmod/*/init/cshrc
 lmod: missing-dep-for-interpreter csh => tcsh | csh | c-shell (usr/share/lmod/*/init/cshrc)
 lmod: csh-considered-harmful usr/share/lmod/*/init/tcsh
 lmod: missing-dep-for-interpreter csh => tcsh | csh | c-shell (usr/share/lmod/*/init/tcsh)
-lmod: tclsh-script-but-no-tclsh-dep usr/share/lmod/*/libexec/ModulesVersion.tcl
-lmod: tclsh-script-but-no-tclsh-dep usr/share/lmod/*/libexec/RC2lua.tcl
-lmod: tclsh-script-but-no-tclsh-dep usr/share/lmod/*/libexec/tcl2lua.tcl
 lmod: executable-not-elf-or-script usr/share/lmod/*/init/perl
+lmod: script-not-executable usr/share/lmod/6.6/libexec/ignore_dirs_converter
+lmod: executable-not-elf-or-script usr/share/lmod/6.6/init/r

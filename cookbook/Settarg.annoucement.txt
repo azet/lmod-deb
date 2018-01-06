@@ -1,0 +1,115 @@
+Lmod Version 5.1.0:
+
+Version 5.1.0 now supports the following new features:
+
+a) module --ignore_cache which tell Lmod to ignore the cache if it
+   exists.
+
+b) module --config report how lmod was configured.
+
+c) Now Lmod does not walk the directory tree on command like list and
+   unload.
+
+d) The pager is now only used when TERM is defined and stderr is
+   connected to a tty (this includes a pty: pseudo tty).
+
+e) Support for settarg has been added.
+
+------------------------------------------------------------------------
+What is Settarg?
+------------------------------------------------------------------------
+* Settarg is new module that access a new tool that dynamically and
+automatically updates "TARG" and a host of other environment variables
+to encapsulates the state of the modules loaded.   For example, if I
+have  the gcc/4.7.2 module loaded and the new settarg module loaded I
+get the following variables defined in my environment.
+
+   TARG=ST_OBJ/_x86_64_06_1a_gcc-4.7.3
+   TARG_COMPILER=gcc-4.7.3
+   TARG_COMPILER_FAMILY=gcc
+   TARG_MACH=x86_64_06_1a
+
+If I change my compiler to intel/13.1.0, the above variable change to:
+
+   TARG=ST_OBJ/_x86_64_06_1a_dbg_intel-13.1.0
+   TARG_COMPILER=intel-13.1.0
+   TARG_COMPILER_FAMILY=intel
+   TARG_MACH=x86_64_06_1a
+
+This was designed to help me as a developer of software applications
+where I am constantly changing compilers, mpi stacks and other
+modules.  These variable are used to set the compiler flags and other
+things in my Makefiles to control how my application is built.  In my
+case TARG is where the the objects, libraries and executables are
+placed during the build process.  It easy to have the title bar
+reflect the dynamic state of your modules.  You control which modules are
+mentioned in the titlebar.
+
+I have found this combination of settarg and Lmod to be a powerful
+development tool.  Even if this workflow is not yours, you may find
+parts of this useful.
+
+
+
+New module settarg
+
+* A new functionality that allows Lmod to keep current and consistent
+  a set of env. variable that encapsolate the state of the currently
+  loaded modules.
+* For example TARG_COMPILER would be gcc-4.7.3
+* First example of a new capiabitlty
+** For example I use it this way
+** In fact it is designed to support this work flow.
+** Even if this workflow is not yours you may find parts of this usefull.
+
+
+
+
+
+
+
+What variables are set by Settarg?
+----------------------------------
+
+Typically you will something this when gcc/4.7.2 is loaded:
+
+
+   TARG=_x86_64_06_1a_gcc-4.7.3
+   TARG_COMPILER=gcc-4.7.3
+   TARG_COMPILER_FAMILY=gcc
+   TARG_MACH=x86_64_06_1a
+   TARG_TARGET=x86_64_06_1a_gcc-4.7.3
+
+When mpich/3.0.4 is also loaded you get:
+
+   TARG=_x86_64_06_1a_gcc-4.7.3_mpich-3.0.4
+   TARG_COMPILER=gcc-4.7.3
+   TARG_COMPILER_FAMILY=gcc
+   TARG_MACH=x86_64_06_1a
+   TARG_TARGET=x86_64_06_1a_gcc-4.7.3_mpich-3.0.4
+   TARG_MPI=mpich-3.0.4
+   TARG_MPI_FAMILY=mpich
+
+The TARG variable reports the state of the modules.  By default the
+TARG variable is:
+
+ TARG =   _ + ${TARG_MACH}     + _ + ${TARG_BUILD_SCENARIO} +
+          _ + ${TARG_COMPILER} + _ + ${TARG_MPI}
+
+where "+" means string concatation.  If one of the above variables
+is undefined then the extra underscores are removed.
+
+The ${TARG_BUILD_SCENARIO} is by default set to be empty.  The
+commands "dbg" and "opt" set TARG_BUILD_SCENARIO to be "dbg" and "opt"
+respectively.   This variable could be used by a build system to
+control whether the optimized or debug version of a program is built.
+
+
+
+
+
+
+
+
+
+

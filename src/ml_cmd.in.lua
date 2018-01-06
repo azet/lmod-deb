@@ -2,8 +2,11 @@
 -- -*- lua -*-
 
 --------------------------------------------------------------------------
--- Fixme
--- @script ml 
+-- This is ml script front end to modules.  You can pretty much do
+-- everything with the ml script that you can do with the module command.
+-- With the "--old_style" option it can be used with the TCL/C module
+-- system.
+-- @script ml
 
 --------------------------------------------------------------------------
 -- Lmod License
@@ -41,23 +44,55 @@
 
 ------------------------------------------------------------------------
 -- Use command name to add the command directory to the package.path
-------------------------------------------------------------------------
-local LuaCommandName = arg[0]
-local i,j = LuaCommandName:find(".*/")
-local LuaCommandName_dir = "./"
-if (i) then
-   LuaCommandName_dir = LuaCommandName:sub(1,j)
+local sys_lua_path = "@sys_lua_path@"
+if (sys_lua_path:sub(1,1) == "@") then
+   sys_lua_path = package.path
 end
-package.path = LuaCommandName_dir .. "../tools/?.lua;" ..
-               LuaCommandName_dir .. "?.lua;"       .. package.path
 
-require("strict")
-require("string_utils")
+local sys_lua_cpath = "@sys_lua_cpath@"
+if (sys_lua_cpath:sub(1,1) == "@") then
+   sys_lua_cpath = package.cpath
+end
+
+package.path   = sys_lua_path
+package.cpath  = sys_lua_cpath
+
+local arg_0    = arg[0]
+local posix    = require("posix")
+local readlink = posix.readlink
+local stat     = posix.stat
+
+local st       = stat(arg_0)
+while (st.type == "link") do
+   arg_0 = readlink(arg_0)
+   st    = stat(arg_0)
+end
+
+local ia,ja = arg_0:find(".*/")
+local LuaCommandName_dir = "./"
+if (ia) then
+   LuaCommandName_dir = arg_0:sub(1,ja)
+end
+
+package.path  = LuaCommandName_dir .. "../tools/?.lua;" ..
+                LuaCommandName_dir .. "?.lua;"          ..
+                sys_lua_path
+package.cpath = sys_lua_cpath
+
+
+pcall(require("strict"))
+
 local concatTbl = table.concat
+
+--------------------------------------------------------------------------
+-- Wrap an entity in single quotes.
+-- @param a a entity to wrap in quotes.
 local function quoteWrap(a)
    return "'" .. tostring(a) .. "'"
 end
 
+--------------------------------------------------------------------------
+-- Simple usage message.
 function usage()
    io.stderr:write("\n",
                    "ml: A handy front end for the module command:\n\n",
@@ -78,6 +113,7 @@ function usage()
                    "Then this is the same :\n",
                    "    $ module name arg1 arg2 ...\n\n",
                    "In other words you can not load a module named: show swap etc\n")
+
    io.stderr:write("\n\n-----------------------------------------------\n",
                    "  Robert McLay, TACC\n",
                    "     mclay@tacc.utexas.edu\n")
@@ -85,6 +121,8 @@ end
 
 
 
+--------------------------------------------------------------------------
+-- The main program.  Process options and generate module command.
 function main()
 
    local argA     = {}
@@ -102,24 +140,28 @@ function main()
       ["-?"] = 0, ["-h"] = 0, ["--help"] = 0, ["-H"] = 0,
       ["--default"]=0,  ["-d"]=0,
       ["--dumpversion"] = 0,
-      ["--expert"]=0,   ["--novice"]=0, 
+      ["--expert"]=0,   ["--novice"]=0,
       ["--force"] = 0,
+      ["--gitversion"] = 0,
       ["--ignore_cache"] = 0,  ["--ignore-cache"] = 0,
       ["--initial_load"] = 0,  ["--initial-load"] = 0,
       ["--latest"] = 0,
       ["--localvar"]=1,
+      ["--pin_versions"]=0, ["--pin-versions"]=0,
       ["--mt"] = 0,
-      ["--quiet"] = 0,  ["-q"] = 0, 
+      ["--quiet"] = 0,  ["-q"] = 0,
       ["--redirect"] = 0, ["--no_redirect"] = 0, ["--no-redirect"] = 0,
       ["--spider_timeout"] = 1,       ["--spider-timeout"] = 1,
-      ["--terse"] = 0,  ["-t"] = 0, 
-      ["--timer"] = 0, 
+      ["--terse"] = 0,  ["-t"] = 0,
+      ["--timer"] = 0,
       ["--version"]=0,  ["--versoin"]=0, ["--ver"]=0, ["--v"]=0, ["-v"]=0,
       ['--config'] = 0,
+      ['--config-json'] = 0,
       ['--raw'] = 0,
       ['--regexp'] = 0, ['-r'] = 0,
-      ['--style'] = 1,  ['-s'] = 1, 
-      ['--width'] = 1,  ['-w'] = 1, 
+      ['--show_hidden'] = 0, ['--show-hidden'] = 0,
+      ['--style'] = 1,  ['-s'] = 1,
+      ['--width'] = 1,  ['-w'] = 1,
    }
 
    local translateT = {
@@ -134,7 +176,8 @@ function main()
    --           has to be non-nil
 
    local lmodCmdT = {
-      avail="avail",  av="avail",
+      avail="avail",  av="avail", available="avail",
+      describe="describe", mcc="describe",
       getdefault="getdefault", gd="getdefault",
       help="help",
       key="keyword", keyword="keyword",
@@ -152,69 +195,76 @@ function main()
       search="search",
       show="show",
       spider="spider",
-      swap="swap", sw="swap", switch="swap",
+      swap="swap", sw="swap",
       tablelist="tablelist",
       ['try-load'] = "try-load",
-      unload="unload", rm = "unload", del = "unload", delete="unload",
-      unuse="unuse",
+      unload="unload", rm = "unload", del = "unload", delete="unload",      unuse="unuse",
       update="update",
       use="use",
       whatis="whatis",
    }
-
    local grab     = 0
    local verbose  = false
    local oldStyle = false
    local show     = false
    local cmdFound = false
 
+   --------------------------------------------------------------------------
+   -- Loop over command line options and process each one.  Note that this
+   -- loop uses the for -- repeat ... until true end trick for simulating
+   -- the continue stmt (which doesn't exist in Lua).
+
    for _,v in ipairs(arg) do
-      local done = false
-      if (grab > 0) then
-         optA[#optA+1] = v
-         grab          = grab - 1
-         done          = true
-      end
+      repeat
+         if (grab > 0) then
+            optA[#optA+1] = v
+            grab          = grab - 1
+            break
+         end
 
-      if (not done and v == "--Verbose") then
-         done    = true
-         verbose = true
-      end
+         if (v == "--Verbose") then
+            verbose = true
+            break
+         end
 
-      if (not done and v == "--old_style") then
-         done     = true
-         oldStyle = true
-      end
+         if (v == "--old_style") then
+            oldStyle = true
+            break
+         end
 
-      if (not done and v == "--show") then
-         done   = true
-         show   = true
-      end
+         if (v == "--show") then
+            show   = true
+            break
+         end
 
-      if (not done and v == "--help" or v == "-?" or v== "-h") then
-         done = true
-         usage()
-         return
-      end
+         if (v == "--help" or v == "-?" or v== "-h") then
+            usage()
+            return
+         end
+
+         local num = lmodOptT[v]
+         if (num) then
+            grab          = num
+            optA[#optA+1] = translateT[v] or v
+            break
+         end
+
+         if (v:find("^%-%-")) then
+            io.stderr:write("Option: \"",v,"\" is unknown\n",
+                            "Try ml --help for usage\n")
+            os.exit(1)
+         end
 
 
-      local num = lmodOptT[v]
-      if (not done and num) then
-         grab          = num
-         optA[#optA+1] = translateT[v] or v
-         done          = true
-      end
+         local cmd = lmodCmdT[v]
+         if (cmd and not cmdFound) then
+            cmdA[#cmdA + 1] = cmd
+            cmdFound        = true
+            break
+         end
 
-      local cmd = lmodCmdT[v]
-      if (not done and cmd and not cmdFound) then
-         cmdA[#cmdA + 1] = cmd
-         done            = true
-         cmdFound        = true
-      end
-
-      if (not done) then
          argA[#argA+1] = v
-      end
+      until true
    end
 
    if (#cmdA > 1) then
@@ -274,10 +324,13 @@ function main()
 
    local s = concatTbl(a," ")
 
+   -- print module command to stderr so user can see what
+   -- this command will do.
    if (verbose or show) then
       io.stderr:write(s, "\n")
    end
 
+   -- Output module command
    if (not show) then
       io.stdout:write(s, "\n")
    end

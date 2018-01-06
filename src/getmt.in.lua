@@ -44,30 +44,56 @@
 --         optionly it writes the state of the ModuleTable is to a
 --         dated file.
 --
-require("strict")
-local cmd = arg[0]
-
-local i,j = cmd:find(".*/")
-local cmd_dir = "./"
-if (i) then
-   cmd_dir = cmd:sub(1,j)
+local sys_lua_path = "@sys_lua_path@"
+if (sys_lua_path:sub(1,1) == "@") then
+   sys_lua_path = package.path
 end
-package.path = cmd_dir .. "../tools/?.lua;"  ..
-               cmd_dir .. "../shells/?.lua;" ..
-               cmd_dir .. "?.lua;"           ..
-               package.path
+
+local sys_lua_cpath = "@sys_lua_cpath@"
+if (sys_lua_cpath:sub(1,1) == "@") then
+   sys_lua_cpath = package.cpath
+end
+
+package.path   = sys_lua_path
+package.cpath  = sys_lua_cpath
+
+local arg_0    = arg[0]
+local posix    = require("posix")
+local readlink = posix.readlink
+local stat     = posix.stat
+
+local st       = stat(arg_0)
+while (st.type == "link") do
+   arg_0 = readlink(arg_0)
+   st    = stat(arg_0)
+end
+
+local ia,ja = arg_0:find(".*/")
+local cmd_dir = "./"
+if (ia) then
+   cmd_dir = arg_0:sub(1,ja)
+end
+
+package.path  = cmd_dir .. "../tools/?.lua;"  ..
+                cmd_dir .. "../shells/?.lua;" ..
+                cmd_dir .. "?.lua;"           ..
+                sys_lua_path
+package.cpath = sys_lua_cpath
 
 function cmdDir()
    return cmd_dir
 end
 
 require("strict")
+
+local BuildFactory = require("BuildFactory")
+BuildFactory:master()
+
 require("fileOps")
 require("serializeTbl")
 require("myGlobals")
 require("capture")
 require("utils")
-build_epoch()               -- build the epoch function
 _ModuleTable_  = ""
 local Optiks   = require("Optiks")
 local lfs      = require("lfs")
@@ -80,6 +106,8 @@ local format   = string.format
 local getenv   = os.getenv
 local load     = (_VERSION == "Lua 5.1") and loadstring or load
 
+--------------------------------------------------------------------------
+-- Save the current value of the module table to a file.
 function main()
 
    local optionTbl = options()
@@ -99,7 +127,7 @@ function main()
    end
 
 
-   local s = serializeTbl{indent=true, name="_ModuleTable_", value= mt}
+   s = serializeTbl{indent=true, name="_ModuleTable_", value= mt}
 
    local fn = nil
    if (optionTbl.save_state) then
@@ -130,6 +158,8 @@ function main()
    end
 end
 
+--------------------------------------------------------------------------
+-- Parse the command line options.
 function options()
    local usage         = "Usage: getmt [options]"
    local cmdlineParser = Optiks:new{usage=usage, version="1.0"}
